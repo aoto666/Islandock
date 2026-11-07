@@ -13,6 +13,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         MigrateOldSettings(); // 設定フォルダーが作られる前に、いちばん最初に行う
+        HookCrashLog();
 
         // 開発用: Islandock.exe --preview 出力.png で、Dock のアイコンを画像に書き出して終了する
         if (e.Args.Length == 2 && e.Args[0] == "--preview")
@@ -102,6 +103,40 @@ public partial class App : Application
     {
         _mutex?.Dispose();
         base.OnExit(e);
+    }
+
+    /// <summary>
+    /// 予期しないエラーを %APPDATA%\Islandock\crash.log に書き残す。
+    /// 画面の処理中に起きたエラーは、アプリを落とさずに続ける。
+    /// </summary>
+    private void HookCrashLog()
+    {
+        DispatcherUnhandledException += (_, e) =>
+        {
+            WriteCrashLog("UI", e.Exception);
+            e.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            WriteCrashLog("AppDomain (終了します)", e.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            WriteCrashLog("Task", e.Exception);
+            e.SetObserved();
+        };
+    }
+
+    public static void WriteCrashLog(string where, Exception? ex)
+    {
+        try
+        {
+            string dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Islandock");
+            System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "crash.log"),
+                $"==== {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{where}]\n{ex}\n\n");
+        }
+        catch
+        {
+        }
     }
 
     /// <summary>
