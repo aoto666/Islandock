@@ -58,6 +58,71 @@ public partial class App : Application
             return;
         }
 
+        // 開発用: Islandock.exe --export-icons 出力フォルダー [dark] で、紹介動画用の大きなアイコンを書き出す
+        if (e.Args.Length is 2 or 3 && e.Args[0] == "--export-icons")
+        {
+            Preview.ExportDemoIcons(e.Args[1], dark: e.Args.Length == 3 && e.Args[2] == "dark");
+            Shutdown();
+            return;
+        }
+
+        // 開発用: Islandock.exe --export-island-demo 出力フォルダー で、アイランドのいろいろな状態を架空のデータで書き出す
+        if (e.Args.Length == 2 && e.Args[0] == "--export-island-demo")
+        {
+            var island = new IslandWindow { Left = -10000, Top = -10000, ShowActivated = false };
+            island.Show();
+            island.ExportDemoStates(e.Args[1]);
+            island.Close();
+            Shutdown();
+            return;
+        }
+
+        // 開発用: Islandock.exe --find-windows 出力.txt で、Dock の各アプリのウィンドウとして見つかるものを書き出す
+        if (e.Args.Length == 2 && e.Args[0] == "--find-windows")
+        {
+            System.IO.File.WriteAllLines(e.Args[1], DockWindow.DescribeAppWindows());
+            Shutdown();
+            return;
+        }
+
+        // 開発用: Islandock.exe --genie-roundtrip ウィンドウ番号(16進) 出力.txt で、ジニーでしまって戻すのを試す
+        if (e.Args.Length == 3 && e.Args[0] == "--genie-roundtrip")
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            GenieRoundTrip(new IntPtr(Convert.ToInt64(e.Args[1], 16)), e.Args[2]);
+            return;
+        }
+
+        // 開発用: Islandock.exe --launch-test exe 出力.txt / --close-test ウィンドウ番号(16進)
+        //   起動・終了のアニメーションを、Dock を使わずに試す（アイコンの位置は画面下の中央とみなす）
+        if (e.Args.Length == 3 && e.Args[0] == "--launch-test")
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            var (icon, dpi) = TestIcon();
+            string exe = e.Args[1], output = e.Args[2];
+            string name = System.IO.Path.GetFileNameWithoutExtension(exe);
+            string? host = AppWindows.IsConsoleApp(exe) ? "WindowsTerminal" : null;
+            Genie.WatchForNewWindow(name, NativeMethods.GetVisibleTopWindows(), h =>
+            {
+                System.IO.File.WriteAllText(output, h.ToInt64().ToString("X"));
+                Genie.Open(h, icon, dpi);
+            }, TimeSpan.FromSeconds(10), host);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+            QuitAfter(5);
+            return;
+        }
+        if (e.Args.Length == 2 && e.Args[0] == "--close-test")
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            Genie.AnimationsEnabled = () => true;
+            var trace = new List<string>();
+            Genie.CloseTrace = m => trace.Add($"{DateTime.Now:HH:mm:ss.fff} {m}");
+            Genie.CloseWithAnimation(new IntPtr(Convert.ToInt64(e.Args[1], 16)));
+            Exit += (_, _) => System.IO.File.WriteAllLines(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "islandock_close_trace.txt"), trace);
+            QuitAfter(3);
+            return;
+        }
+
         // 開発用: Islandock.exe --list-apps 出力.txt で、アプリ一覧を書き出す
         if (e.Args.Length == 2 && e.Args[0] == "--list-apps")
         {
@@ -134,6 +199,39 @@ public partial class App : Application
         ClockWidget.ShowIfEnabled();
         DesktopRightClick.Start();
         StartupRegistration.RefreshPath();
+    }
+
+    private async void GenieRoundTrip(IntPtr hwnd, string output)
+    {
+        var log = new List<string>();
+        string State() => $"iconic={NativeMethods.IsIconic(hwnd)} visible={NativeMethods.IsWindowVisible(hwnd)} " +
+                          $"layered={(NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE) & 0x80000) != 0}";
+        var area = SystemParameters.WorkArea;
+        double dpi = System.Windows.Media.VisualTreeHelper.GetDpi(new System.Windows.Controls.Border()).DpiScaleX;
+        var icon = new Rect((area.Left + area.Width / 2 - 24) * dpi, (area.Bottom - 60) * dpi, 48 * dpi, 48 * dpi);
+        log.Add("before:   " + State());
+        Genie.Minimize(hwnd, icon, dpi);
+        await Task.Delay(1500);
+        log.Add("minimized:" + State());
+        Genie.Open(hwnd, icon, dpi);
+        await Task.Delay(1500);
+        log.Add("restored: " + State());
+        System.IO.File.WriteAllLines(output, log);
+        Shutdown();
+    }
+
+    private static (Rect icon, double dpi) TestIcon()
+    {
+        var area = SystemParameters.WorkArea;
+        double dpi = System.Windows.Media.VisualTreeHelper.GetDpi(new System.Windows.Controls.Border()).DpiScaleX;
+        return (new Rect((area.Left + area.Width / 2 - 24) * dpi, (area.Bottom - 60) * dpi, 48 * dpi, 48 * dpi), dpi);
+    }
+
+    private void QuitAfter(double seconds)
+    {
+        var quit = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
+        quit.Tick += (_, _) => Shutdown();
+        quit.Start();
     }
 
     protected override void OnExit(ExitEventArgs e)

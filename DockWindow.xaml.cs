@@ -60,6 +60,7 @@ public partial class DockWindow : Window
 
         _settings = DockConfig.LoadSettings();
         _entries = DockConfig.Load();
+        AppWindows.Start();
         SyncDesktopApps(rebuild: false);
         RebuildItems();
         ApplyTheme();
@@ -120,6 +121,9 @@ public partial class DockWindow : Window
         _hwnd = new WindowInteropHelper(this).Handle;
         SetWindowLong(_hwnd, GWL_EXSTYLE, GetWindowLong(_hwnd, GWL_EXSTYLE) | WS_EX_TOOLWINDOW);
 
+        // 閉じるときのアニメーションも、ジニーの設定に合わせる
+        Genie.AnimationsEnabled = () => _settings.OpenAnimation;
+
         // タイトルバーの最小化ボタンでしまうときも、Dock のアイコンへ吸い込ませる
         Genie.WatchTitleBarMinimize(
             hwnd => _settings.OpenAnimation && FindDockItem(hwnd) != null,
@@ -131,20 +135,30 @@ public partial class DockWindow : Window
     private DockItem? FindDockItem(IntPtr hwnd)
     {
         var apps = AppItems.ToList();
-        var launched = apps.FirstOrDefault(i => i.Entry.LaunchedWindow == hwnd);
-        if (launched != null) return launched;
 
+        // 1. Dock から開いた / Dock に格納したことのあるウィンドウ
+        string? owner = AppWindows.OwnerPath(hwnd);
+        if (owner != null)
+        {
+            var known = apps.FirstOrDefault(i => i.Entry.Path.Equals(owner, StringComparison.OrdinalIgnoreCase));
+            if (known != null) return known;
+        }
+
+        // 2. プロセス名が同じアプリ
         GetWindowThreadProcessId(hwnd, out uint pid);
         try
         {
             using var p = Process.GetProcessById((int)pid);
-            return apps.FirstOrDefault(i => System.IO.Path.GetFileNameWithoutExtension(i.TargetPath)
+            var byName = apps.FirstOrDefault(i => System.IO.Path.GetFileNameWithoutExtension(i.TargetPath)
                 .Equals(p.ProcessName, StringComparison.OrdinalIgnoreCase));
+            if (byName != null) return byName;
         }
         catch
         {
-            return null;
         }
+
+        // 3. ターミナルの中で開いているコンソールのアプリ（PowerShell など）
+        return apps.FirstOrDefault(i => AppWindows.ConsoleWindowsOf(i.Entry, i.TargetPath).Contains(hwnd));
     }
 
     private DateTime _forceShowUntil = DateTime.MinValue;
@@ -154,6 +168,7 @@ public partial class DockWindow : Window
     {
         var item = FindDockItem(hwnd);
         if (item == null) return Rect.Empty;
+        AppWindows.Remember(hwnd, item.Entry); // タイトルが変わっても、このアイコンのウィンドウだと分かるように
         _forceShowUntil = DateTime.Now + TimeSpan.FromMilliseconds(1100);
         _dockShown = true;
         var r = IconRectPx(item);
@@ -164,6 +179,7 @@ public partial class DockWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         Genie.StopWatchingTitleBarMinimize();
+        AppWindows.Stop();
         CompositionTarget.Rendering -= OnRendering;
         SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
@@ -510,7 +526,10 @@ public partial class DockWindow : Window
 
     // ===== アプリの起動 =====
 
-    private void Launch(DockItem item)
+    private void Launch(DockItem item) => Launch(item, forceNew: false);
+
+    /// <summary>forceNew: 起動中でも新しいウィンドウを開く（右クリックの「新しいウィンドウ」）</summary>
+    private void Launch(DockItem item, bool forceNew)
     {
         HideWindowPreview();
         _previewSuppressed = true;
@@ -527,23 +546,25 @@ public partial class DockWindow : Window
         }
 
         // すでに起動中ならそのウィンドウを前面に出す
-        if (TryActivateRunningApp(item)) return;
+        if (!forceNew && TryActivateRunningApp(item)) return;
 
         try
         {
             // 起動前に「いま前面にあるウィンドウ」と「同名プロセスのウィンドウ」を覚えておく
             IntPtr foregroundBefore = GetForegroundWindow();
             string processName = System.IO.Path.GetFileNameWithoutExtension(item.TargetPath);
+            // コンソールのアプリは「ターミナル」のウィンドウとして開くことがある
+            string? hostName = AppWindows.IsConsoleApp(item.TargetPath) ? "WindowsTerminal" : null;
             var windowsBefore = GetMainWindows(processName);
+            if (hostName != null) windowsBefore.UnionWith(GetMainWindows(hostName));
             var allWindowsBefore = GetVisibleTopWindows();
-            item.Entry.LaunchedWindow = IntPtr.Zero;
 
             // 新しいウィンドウが出た瞬間に、アイコンから引き伸ばすアニメーションを始める
             if (_settings.OpenAnimation)
             {
                 var icon = IconRectPx(item);
                 double dpi = DpiScale;
-                Genie.WatchForNewWindow(processName, windowsBefore, hwnd => Genie.Open(hwnd, icon, dpi), TimeSpan.FromSeconds(15));
+                Genie.WatchForNewWindow(processName, windowsBefore, hwnd => Genie.Open(hwnd, icon, dpi), TimeSpan.FromSeconds(15), hostName);
             }
 
             if (item.Entry.IsShellApp)
@@ -555,7 +576,7 @@ public partial class DockWindow : Window
             // そのとき出てきた新しいウィンドウを覚えておき、もう一度押されたらそれをしまう
             void Remember(IntPtr h)
             {
-                item.Entry.LaunchedWindow = h;
+                AppWindows.Remember(h, item.Entry);
                 LearnProcessName(item, h);
             }
 
@@ -570,6 +591,8 @@ public partial class DockWindow : Window
                 }
 
                 var created = GetAppWindows(processName).FirstOrDefault(h => !windowsBefore.Contains(h));
+                if (created == IntPtr.Zero && hostName != null)
+                    created = GetAppWindows(hostName).FirstOrDefault(h => !windowsBefore.Contains(h));
                 if (created == IntPtr.Zero && processName.Length == 0)
                 {
                     // プロセス名が分からないアプリ（Chrome をストアアプリ形式で登録した場合など）は、
@@ -637,27 +660,36 @@ public partial class DockWindow : Window
         }
     }
 
+    /// <summary>アイコンを押して、まとめて格納したウィンドウ（もう一度押したら、まとめて戻す）</summary>
+    private readonly Dictionary<DockEntry, List<IntPtr>> _minimizedBatch = new();
+
     private bool TryActivateRunningApp(DockItem item)
     {
         string name = System.IO.Path.GetFileNameWithoutExtension(item.TargetPath);
         // エクスプローラーは常に動いているので、毎回新しいウィンドウを開く
         if (name.Equals("explorer", StringComparison.OrdinalIgnoreCase)) return false;
 
-        var windows = FindAppWindows(item, name);
+        var windows = FindAppWindows(item, name).Where(h => !WindowPreview.IsCloaked(h)).ToList();
         if (windows.Count == 0) return false;
+        foreach (var h in windows) AppWindows.Remember(h, item.Entry);
 
-        // いちばん手前に出ているアプリをもう一度押したら、開くときの逆再生で Dock へしまう
+        // いちばん手前に出ているアプリをもう一度押したら、そのアプリのウィンドウを全部 Dock へしまう
         IntPtr fg = GetForegroundWindow();
-        IntPtr front = windows.FirstOrDefault(h => !IsIconic(h) && (h == _lastAppForeground || h == fg));
-        if (front != IntPtr.Zero)
+        var open = windows.Where(h => !IsIconic(h)).ToList();
+        if (open.Any(h => h == _lastAppForeground || h == fg))
         {
-            if (_settings.OpenAnimation) Genie.Minimize(front, IconRectPx(item), DpiScale);
-            else ShowWindow(front, SW_MINIMIZE);
+            var icon = IconRectPx(item);
+            foreach (var h in open)
+            {
+                AppWindows.NoteMinimized(h);
+                if (_settings.OpenAnimation) Genie.Minimize(h, icon, DpiScale);
+                else ShowWindow(h, SW_MINIMIZE);
+            }
+            _minimizedBatch[item.Entry] = open;
             return true;
         }
 
         // macOS と同じく、しまっていないウィンドウがあれば、それを全部（重なり順はそのまま）手前に出す
-        var open = windows.Where(h => !IsIconic(h)).ToList();
         if (open.Count > 0)
         {
             for (int i = open.Count - 1; i >= 1; i--)
@@ -666,39 +698,83 @@ public partial class DockWindow : Window
             return true;
         }
 
-        // 全部しまってあるときは、最後にしまったウィンドウを 1 つだけ戻す（ほかは右側のアイコンから戻せる）
-        IntPtr hwnd = windows[0];
-        // 最小化されていたら、アイコンから引き伸ばしながら戻す（前面に出すのも Genie 側で行う）
-        if (_settings.OpenAnimation)
-        {
-            Genie.Open(hwnd, IconRectPx(item), DpiScale);
-            return true;
-        }
-        ShowWindow(hwnd, SW_RESTORE);
-        SetForegroundWindow(hwnd);
+        // 全部しまってあるとき:
+        //  ・アイコンを押してまとめてしまったのなら、まとめて戻す
+        //  ・1 つずつしまったのなら、最後にしまったものを戻す（ほかはアイコンに乗せたときの一覧から戻せる）
+        List<IntPtr> restore;
+        if (_minimizedBatch.TryGetValue(item.Entry, out var batch) && batch.Count > 0 &&
+            batch.All(h => IsWindow(h) && IsIconic(h)) && batch.All(windows.Contains))
+            restore = AppWindows.InZOrder(batch);
+        else
+            restore = new List<IntPtr> { windows.OrderByDescending(AppWindows.LastMinimized).First() };
+        _minimizedBatch.Remove(item.Entry);
+        RestoreWindows(item, restore);
         return true;
     }
 
+    /// <summary>開発用: Dock の各アプリについて、そのアプリのウィンドウとして見つかるものを一覧にする</summary>
+    internal static List<string> DescribeAppWindows()
+    {
+        AppWindows.Start();
+        var lines = new List<string>();
+        foreach (var entry in DockConfig.Load())
+        {
+            var item = new DockItem(entry, 48, 4);
+            string name = System.IO.Path.GetFileNameWithoutExtension(item.TargetPath);
+            var windows = FindAppWindows(item, name);
+            lines.Add($"== {entry.Name} ({item.TargetPath}) console={AppWindows.IsConsoleApp(item.TargetPath)} windows={windows.Count}");
+            foreach (var h in windows)
+            {
+                var title = new System.Text.StringBuilder(256);
+                GetWindowText(h, title, title.Capacity);
+                lines.Add($"   {h:X} [{AppWindows.ClassOf(h)}] iconic={IsIconic(h)} {title}");
+            }
+        }
+        AppWindows.Stop();
+        return lines;
+    }
+
+    /// <summary>右クリックの「終了」: そのアプリのウィンドウを全部、アニメーション付きで閉じる</summary>
+    private void QuitApp(DockItem item)
+    {
+        string name = System.IO.Path.GetFileNameWithoutExtension(item.TargetPath);
+        if (name.Equals("explorer", StringComparison.OrdinalIgnoreCase)) return;
+        foreach (var h in FindAppWindows(item, name)) Genie.CloseWithAnimation(h);
+    }
+
+    /// <summary>しまってあるウィンドウを戻す（最初のものがいちばん手前になる）</summary>
+    private async void RestoreWindows(DockItem item, List<IntPtr> windows)
+    {
+        var icon = IconRectPx(item);
+        for (int i = windows.Count - 1; i >= 0; i--)
+        {
+            IntPtr h = windows[i];
+            if (_settings.OpenAnimation)
+            {
+                // 最小化されていたら、アイコンから引き伸ばしながら戻す（前面に出すのも Genie 側で行う）
+                Genie.Open(h, icon, DpiScale);
+                if (i > 0) await Task.Delay(70);
+            }
+            else
+            {
+                ShowWindow(h, SW_RESTORE);
+                SetForegroundWindow(h);
+            }
+        }
+    }
+
     /// <summary>
-    /// そのアプリのウィンドウを集める。
-    /// Dock から起動したときに覚えたウィンドウを優先し、続いて同じ名前のプロセスのウィンドウ。
+    /// そのアプリのウィンドウを、画面の手前にあるものから順にすべて集める。
+    ///  ・Dock から開いた / Dock に格納したことのあるウィンドウ
+    ///  ・同じ名前のプロセスのウィンドウ
+    ///  ・コンソールのアプリなら、ターミナルの中で開いているウィンドウ（タイトルで判断）
     /// </summary>
     private static List<IntPtr> FindAppWindows(DockItem item, string processName)
     {
-        var list = new List<IntPtr>();
-        IntPtr launched = item.Entry.LaunchedWindow;
-        if (launched != IntPtr.Zero)
-        {
-            if (IsWindow(launched) && IsWindowVisible(launched)) list.Add(launched);
-            else item.Entry.LaunchedWindow = IntPtr.Zero; // 閉じられていたら忘れる
-        }
-
-        if (processName.Length > 0)
-        {
-            foreach (var h in GetMainWindows(processName))
-                if (!list.Contains(h)) list.Add(h);
-        }
-        return list;
+        var set = new HashSet<IntPtr>(AppWindows.OwnedBy(item.Entry).Where(IsLikelyAppWindow));
+        if (processName.Length > 0) set.UnionWith(GetMainWindows(processName));
+        set.UnionWith(AppWindows.ConsoleWindowsOf(item.Entry, item.TargetPath));
+        return AppWindows.InZOrder(set);
     }
 
     /// <summary>
@@ -850,9 +926,7 @@ public partial class DockWindow : Window
         {
             if (item.IsTrash || item.IsAddButton) continue;
             string name = System.IO.Path.GetFileNameWithoutExtension(item.TargetPath);
-            IntPtr launched = item.Entry.LaunchedWindow;
-            bool launchedAlive = launched != IntPtr.Zero && IsWindow(launched);
-            item.IsRunning = (name.Length > 0 && running.Contains(name)) || launchedAlive;
+            item.IsRunning = (name.Length > 0 && running.Contains(name)) || AppWindows.OwnedBy(item.Entry).Any();
         }
     }
 
@@ -891,11 +965,13 @@ public partial class DockWindow : Window
         {
             int index = _entries.IndexOf(item.Entry);
             menu.Items.Add(Item("開く", () => Launch(item)));
+            menu.Items.Add(Item("新しいウィンドウ", () => Launch(item, forceNew: true)));
             menu.Items.Add(Item("エクスプローラーで表示", () =>
                 Process.Start("explorer.exe", $"/select,\"{item.Entry.Path}\""), enabled: !item.Entry.IsShellApp));
             menu.Items.Add(new Separator());
             menu.Items.Add(Item("左へ移動", () => MoveEntry(item.Entry, -1), index > 0));
             menu.Items.Add(Item("右へ移動", () => MoveEntry(item.Entry, +1), index < _entries.Count - 1));
+            menu.Items.Add(Item("終了", () => QuitApp(item)));
             menu.Items.Add(new Separator());
             menu.Items.Add(Item("Dock から削除", () =>
             {

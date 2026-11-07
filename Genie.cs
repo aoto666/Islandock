@@ -30,6 +30,7 @@ public static class Genie
     private static IntPtr _hook;
     private static Action<IntPtr>? _onFound;
     private static string _watchName = "";
+    private static string? _watchHost;
     private static HashSet<IntPtr> _ignore = new();
     private static System.Windows.Threading.DispatcherTimer? _watchTimeout;
 
@@ -37,16 +38,20 @@ public static class Genie
     /// 指定したプロセス名の「新しいウィンドウ」が画面に出た瞬間に onFound を呼ぶ。
     /// 出た瞬間に呼ぶことで、ちらつく前にウィンドウを隠せる。
     /// </summary>
-    public static void WatchForNewWindow(string processName, HashSet<IntPtr> existing, Action<IntPtr> onFound, TimeSpan timeout)
+    /// <param name="hostName">そのアプリのウィンドウを代わりに出すプロセス（PowerShell なら WindowsTerminal）</param>
+    public static void WatchForNewWindow(string processName, HashSet<IntPtr> existing, Action<IntPtr> onFound, TimeSpan timeout,
+        string? hostName = null)
     {
         StopWatching();
         if (string.IsNullOrEmpty(processName)) return;
 
         _watchName = processName;
+        _watchHost = hostName;
         _ignore = existing;
         _onFound = onFound;
         _hookProc = OnWinEvent;
-        _hook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, IntPtr.Zero, _hookProc, 0, 0,
+        // 作られた瞬間（まだ画面に出る前）に隠しておき、表示されたらアニメーションで出す
+        _hook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW, IntPtr.Zero, _hookProc, 0, 0,
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
         _watchTimeout = new System.Windows.Threading.DispatcherTimer { Interval = timeout };
@@ -61,27 +66,110 @@ public static class Genie
         _onFound = null;
         _watchTimeout?.Stop();
         _watchTimeout = null;
+        // 隠したまま出てこなかったウィンドウは元に戻す
+        foreach (var h in PreHidden.Keys.ToList()) ReleasePreHidden(h);
+        _pidNames.Clear();
+    }
+
+    /// <summary>作られた瞬間に隠したウィンドウ（表示されたらアニメーションで出す）</summary>
+    private static readonly Dictionary<IntPtr, WindowHider> PreHidden = new();
+    /// <summary>隠した状態のまま Open に引き渡すウィンドウ</summary>
+    private static readonly Dictionary<IntPtr, WindowHider> HandOff = new();
+    private static readonly Dictionary<uint, string> _pidNames = new();
+
+    private static void ReleasePreHidden(IntPtr hwnd)
+    {
+        if (!PreHidden.Remove(hwnd, out var hider)) return;
+        hider.Restore();
+        if (IsWindow(hwnd)) SetTransitions(hwnd, enabled: true);
+    }
+
+    private static bool IsWatchedProcess(IntPtr hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        if (!_pidNames.TryGetValue(pid, out var name))
+        {
+            try
+            {
+                using var p = Process.GetProcessById((int)pid);
+                name = p.ProcessName;
+            }
+            catch
+            {
+                name = "";
+            }
+            _pidNames[pid] = name;
+        }
+        return name.Equals(_watchName, StringComparison.OrdinalIgnoreCase) ||
+               (_watchHost != null && name.Equals(_watchHost, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void OnWinEvent(IntPtr hook, uint evt, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
     {
         if (idObject != 0 || idChild != 0 || hwnd == IntPtr.Zero || _onFound == null) return;
-        if (_ignore.Contains(hwnd) || !IsAppWindow(hwnd)) return;
+        if (_ignore.Contains(hwnd)) return;
 
-        GetWindowThreadProcessId(hwnd, out uint pid);
-        try
+        if (evt == EVENT_OBJECT_DESTROY)
         {
-            using var p = Process.GetProcessById((int)pid);
-            if (!p.ProcessName.Equals(_watchName, StringComparison.OrdinalIgnoreCase)) return;
-        }
-        catch
-        {
+            PreHidden.Remove(hwnd);
             return;
         }
 
+        if (evt == EVENT_OBJECT_CREATE)
+        {
+            // 起動したアプリの、持ち主のいないトップレベルのウィンドウなら、画面に出る前に隠しておく
+            if (PreHidden.ContainsKey(hwnd) || GetAncestor(hwnd, GA_ROOT) != hwnd || GetWindow(hwnd, GW_OWNER) != IntPtr.Zero) return;
+            if ((GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) != 0 || !IsWatchedProcess(hwnd)) return;
+            bool transitionsOff = SetTransitions(hwnd, enabled: false);
+            var hider = WindowHider.Hide(hwnd, allowRegion: true);
+            if (hider != null) PreHidden[hwnd] = hider;
+            else if (transitionsOff) SetTransitions(hwnd, enabled: true);
+            return;
+        }
+
+        // EVENT_OBJECT_SHOW
+        if (!IsWatchedProcess(hwnd)) return;
+        if (!IsAppWindow(hwnd, allowDirectComposition: true))
+        {
+            // Edge などは、最初は小さく作ってから大きくする。隠してあるウィンドウは、大きくなるのを少し待つ
+            if (PreHidden.ContainsKey(hwnd)) WaitForSize(hwnd);
+            return;
+        }
+        Found(hwnd);
+    }
+
+    private static void Found(IntPtr hwnd)
+    {
+        if (_onFound == null) return;
+        if (PreHidden.Remove(hwnd, out var pre)) HandOff[hwnd] = pre;
         var found = _onFound;
         StopWatching();
         found(hwnd);
+    }
+
+    private static void WaitForSize(IntPtr hwnd)
+    {
+        var started = DateTime.Now;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+        timer.Tick += (_, _) =>
+        {
+            if (!PreHidden.ContainsKey(hwnd) || _onFound == null)
+            {
+                timer.Stop();
+                return;
+            }
+            if (IsAppWindow(hwnd, allowDirectComposition: true))
+            {
+                timer.Stop();
+                Found(hwnd);
+            }
+            else if (!IsWindow(hwnd) || DateTime.Now - started > TimeSpan.FromSeconds(1.5))
+            {
+                timer.Stop();
+                ReleasePreHidden(hwnd); // 小さなポップアップなどだった
+            }
+        };
+        timer.Start();
     }
 
     /// <summary>
@@ -114,10 +202,18 @@ public static class Genie
     public static async void Open(IntPtr hwnd, Rect iconPx, double dpiScale)
     {
         bool iconic = IsIconic(hwnd);
-        if (!IsAppWindow(hwnd) && !iconic) return;
-        if (!Running.Add(hwnd)) return;
+        HandOff.Remove(hwnd, out var pre);
+        if (pre == null && !IsAppWindow(hwnd, allowDirectComposition: true) && !iconic) return;
+        if (!Running.Add(hwnd))
+        {
+            pre?.Restore();
+            return;
+        }
 
-        var hider = WindowHider.Hide(hwnd);
+        // 起動したばかりのウィンドウは、作られた瞬間に隠してある（pre）
+        // 透明にできないウィンドウ（Chrome やターミナル）は、表示範囲を空にして隠す
+        var hider = pre ?? WindowHider.Hide(hwnd, allowRegion: !iconic);
+        bool transitionsOff = pre != null || (!iconic && hider != null && SetTransitions(hwnd, enabled: false));
         if (hider == null)
         {
             // 透明にできないウィンドウ（Chrome など）は、しまったときの画像を使って戻す
@@ -147,6 +243,8 @@ public static class Genie
 
             var (image, framePx) = Capture(hwnd);
             if (image == null) return;
+            // 表示範囲を空にして隠したウィンドウは、中身が写らないことがある（真っ黒になる）
+            if (hider.ByRegion && IsBlank(image)) image = Placeholder(framePx, dark: GetClassNameOf(hwnd) is "CASCADIA_HOSTING_WINDOW_CLASS" or "ConsoleWindowClass");
 
             var frame = new Rect(framePx.X / dpiScale, framePx.Y / dpiScale, framePx.Width / dpiScale, framePx.Height / dpiScale);
             var icon = new Rect(iconPx.X / dpiScale, iconPx.Y / dpiScale, iconPx.Width / dpiScale, iconPx.Height / dpiScale);
@@ -166,6 +264,7 @@ public static class Genie
         {
             hider.Restore();
             overlay?.Close();
+            if (transitionsOff && IsWindow(hwnd)) SetTransitions(hwnd, enabled: true);
             Running.Remove(hwnd);
         }
     }
@@ -299,6 +398,11 @@ public static class Genie
 
         IntPtr lParam = (IntPtr)(((pt.Y & 0xFFFF) << 16) | (pt.X & 0xFFFF));
         if (SendMessageTimeout(hwnd, WM_NCHITTEST, IntPtr.Zero, lParam, SMTO_ABORTIFHUNG, 50, out IntPtr hit) == IntPtr.Zero) return;
+        if ((int)hit == HTCLOSE)
+        {
+            if (AnimationsEnabled?.Invoke() == true) BeginClose(hwnd, () => (GetAsyncKeyState(vk) & 0x8000) != 0, TimeSpan.FromMilliseconds(400));
+            return;
+        }
         if ((int)hit != HTMINBUTTON) return;
 
         if (IsIconic(hwnd) || !IsAppWindow(hwnd, allowDirectComposition: true)) return;
@@ -364,6 +468,121 @@ public static class Genie
         }
     }
 
+    // ===================== 閉じるとき =====================
+
+    /// <summary>アニメーションの設定がオンか（Dock 側から渡す）</summary>
+    public static Func<bool>? AnimationsEnabled { get; set; }
+
+    private static readonly HashSet<IntPtr> PendingClose = new();
+
+    /// <summary>
+    /// Dock の「終了」から: ウィンドウを閉じて、縮みながら消えるアニメーションを出す。
+    /// 保存の確認などで閉じなかったら、何もしない。
+    /// </summary>
+    public static void CloseWithAnimation(IntPtr hwnd)
+    {
+        if (AnimationsEnabled?.Invoke() == true && !IsIconic(hwnd))
+            BeginClose(hwnd, () => false, TimeSpan.FromMilliseconds(1500));
+        PostMessage(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <summary>開発用: 閉じるアニメーションの経過（確認用）</summary>
+    public static Action<string>? CloseTrace { get; set; }
+
+    /// <summary>
+    /// 見えている今のうちに中身を写し取り、まったく同じ位置に重ねておく。
+    /// ウィンドウが消えたら、写し取った画像を縮めながら消す。
+    /// stillPressing: まだボタンを押している間は待つ / wait: 押し終わってからこの時間内に閉じなければ取りやめ
+    /// </summary>
+    private static void BeginClose(IntPtr hwnd, Func<bool> stillPressing, TimeSpan wait)
+    {
+        if (PendingClose.Contains(hwnd) || Running.Contains(hwnd)) return;
+        if (IsIconic(hwnd) || !IsAppWindow(hwnd, allowDirectComposition: true)) { CloseTrace?.Invoke("skip: not app window"); return; }
+        var (image, framePx) = Capture(hwnd);
+        if (image == null) { CloseTrace?.Invoke("skip: capture failed"); return; }
+        CloseTrace?.Invoke($"overlay shown {framePx}");
+
+        double dpi = _dpiScale?.Invoke() ?? 1;
+        var overlay = new CloseWindow(image, ToDip(framePx, dpi));
+        overlay.Show();
+        bool transitionsOff = SetTransitions(hwnd, enabled: false); // Windows 標準の閉じるアニメーションは止める
+        PendingClose.Add(hwnd);
+
+        DateTime? releasedAt = null;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(15) };
+        timer.Tick += (_, _) =>
+        {
+            if (!IsWindow(hwnd) || !IsWindowVisible(hwnd))
+            {
+                timer.Stop();
+                PendingClose.Remove(hwnd);
+                CloseTrace?.Invoke("window closed -> play");
+                overlay.PlayClose();
+                if (transitionsOff && IsWindow(hwnd)) SetTransitions(hwnd, enabled: true);
+                return;
+            }
+            if (stillPressing()) return;
+            releasedAt ??= DateTime.Now;
+            if (DateTime.Now - releasedAt < wait) return;
+
+            // 閉じなかった（ボタンの外で離した・保存の確認が出た など）
+            timer.Stop();
+            PendingClose.Remove(hwnd);
+            overlay.Close();
+            if (transitionsOff) SetTransitions(hwnd, enabled: true);
+        };
+        timer.Start();
+    }
+
+    /// <summary>閉じたウィンドウの画像を、少し縮めながら消す</summary>
+    private sealed class CloseWindow : Window
+    {
+        private readonly ScaleTransform _scale = new(1, 1);
+
+        public CloseWindow(BitmapSource image, Rect frame)
+        {
+            WindowStyle = WindowStyle.None;
+            AllowsTransparency = true;
+            Background = Brushes.Transparent;
+            ShowInTaskbar = false;
+            ShowActivated = false;
+            Topmost = true;
+            ResizeMode = ResizeMode.NoResize;
+            IsHitTestVisible = false;
+            Left = frame.X;
+            Top = frame.Y;
+            Width = frame.Width;
+            Height = frame.Height;
+            var img = new System.Windows.Controls.Image { Source = image, Stretch = Stretch.Fill };
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+            Content = new System.Windows.Controls.Grid
+            {
+                Children = { img },
+                RenderTransform = _scale,
+                RenderTransformOrigin = new Point(0.5, 0.5),
+            };
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            var hwnd = new WindowInteropHelper(this).Handle;
+            SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        }
+
+        public void PlayClose()
+        {
+            var duration = TimeSpan.FromMilliseconds(230);
+            var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn };
+            var shrink = new System.Windows.Media.Animation.DoubleAnimation(0.86, duration) { EasingFunction = ease };
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(0, duration) { EasingFunction = ease };
+            fade.Completed += (_, _) => Close();
+            _scale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
+            _scale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink);
+            BeginAnimation(OpacityProperty, fade);
+        }
+    }
+
     // ===================== 透明にできないウィンドウ用 =====================
 
     private sealed record Snapshot(BitmapSource Image, Rect FramePx);
@@ -422,6 +641,52 @@ public static class Genie
         }
     }
 
+    /// <summary>画像がほぼ真っ黒（または透明）か</summary>
+    private static bool IsBlank(BitmapSource image)
+    {
+        var src = image.Format == PixelFormats.Bgra32 || image.Format == PixelFormats.Bgr32
+            ? image : new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        int w = src.PixelWidth, h = src.PixelHeight;
+        int stride = w * 4;
+        var row = new byte[stride];
+        for (int k = 1; k <= 12; k++)
+        {
+            int y = h * k / 13;
+            src.CopyPixels(new Int32Rect(0, y, w, 1), row, stride, 0);
+            for (int x = 0; x < w; x += Math.Max(1, w / 40))
+            {
+                int i = x * 4;
+                if (row[i] > 12 || row[i + 1] > 12 || row[i + 2] > 12) return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>中身が写せなかったときの、ウィンドウの形をした代わりの絵</summary>
+    private static BitmapSource Placeholder(Rect framePx, bool dark)
+    {
+        int w = Math.Max(1, (int)(framePx.Width / 2)), h = Math.Max(1, (int)(framePx.Height / 2));
+        var dv = new DrawingVisual();
+        using (var dc = dv.RenderOpen())
+        {
+            var body = new SolidColorBrush(dark ? Color.FromRgb(0x0C, 0x0C, 0x0C) : Color.FromRgb(0xF7, 0xF7, 0xF8));
+            var bar = new SolidColorBrush(dark ? Color.FromRgb(0x20, 0x20, 0x22) : Color.FromRgb(0xEC, 0xEC, 0xEE));
+            dc.DrawRectangle(body, null, new Rect(0, 0, w, h));
+            dc.DrawRectangle(bar, null, new Rect(0, 0, w, Math.Min(18, h)));
+        }
+        var bmp = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        bmp.Render(dv);
+        bmp.Freeze();
+        return bmp;
+    }
+
+    private static string GetClassNameOf(IntPtr hwnd)
+    {
+        var sb = new System.Text.StringBuilder(128);
+        GetClassName(hwnd, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
     /// <summary>Windows 標準の最小化・復元アニメーションのオン/オフ。変更できたら true</summary>
     private static bool SetTransitions(IntPtr hwnd, bool enabled)
     {
@@ -471,26 +736,33 @@ public static class Genie
         private readonly IntPtr _hwnd;
         private readonly bool _wasLayered;
         private readonly byte _alpha;
+        private readonly bool _byRegion;
         private bool _restored;
 
-        private WindowHider(IntPtr hwnd, bool wasLayered, byte alpha)
+        /// <summary>表示範囲を空にして隠したか（このときは中身を写し取れないことがある）</summary>
+        public bool ByRegion => _byRegion;
+
+        private WindowHider(IntPtr hwnd, bool wasLayered, byte alpha, bool byRegion = false)
         {
             _hwnd = hwnd;
             _wasLayered = wasLayered;
             _alpha = alpha;
+            _byRegion = byRegion;
         }
 
-        public static WindowHider? Hide(IntPtr hwnd)
+        /// <param name="allowRegion">透明にできないウィンドウは、表示範囲を空にして隠す</param>
+        public static WindowHider? Hide(IntPtr hwnd, bool allowRegion = false)
         {
             int ex = GetWindowLong(hwnd, GWL_EXSTYLE);
-            // Chrome などは透明化の指定が成功しても実際には消えないので、最初から対象外にする
-            if ((ex & WS_EX_NOREDIRECTIONBITMAP) != 0) return null;
+            // Chrome などは透明化の指定が成功しても実際には消えないので、透明化は使わない
+            if ((ex & WS_EX_NOREDIRECTIONBITMAP) != 0) return allowRegion ? HideByRegion(hwnd) : null;
             bool layered = (ex & WS_EX_LAYERED) != 0;
             byte alpha = 255;
             if (layered)
             {
-                // すでに独自の透明処理をしているウィンドウは、壊さないよう触らない
-                if (!GetLayeredWindowAttributes(hwnd, out _, out alpha, out uint flags) || (flags & LWA_ALPHA) == 0) return null;
+                // すでに独自の透明処理をしているウィンドウは、壊さないよう透明化では触らない
+                if (!GetLayeredWindowAttributes(hwnd, out _, out alpha, out uint flags) || (flags & LWA_ALPHA) == 0)
+                    return allowRegion ? HideByRegion(hwnd) : null;
             }
             else
             {
@@ -499,9 +771,20 @@ public static class Genie
             if (!SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA))
             {
                 if (!layered) SetWindowLong(hwnd, GWL_EXSTYLE, ex);
-                return null;
+                return allowRegion ? HideByRegion(hwnd) : null;
             }
             return new WindowHider(hwnd, layered, alpha);
+        }
+
+        private static WindowHider? HideByRegion(IntPtr hwnd)
+        {
+            IntPtr rgn = CreateRectRgn(0, 0, 0, 0);
+            if (SetWindowRgn(hwnd, rgn, true) == 0)
+            {
+                DeleteObject(rgn);
+                return null;
+            }
+            return new WindowHider(hwnd, false, 255, byRegion: true); // 成功したら領域は Windows が持つ
         }
 
         public void Restore()
@@ -509,6 +792,11 @@ public static class Genie
             if (_restored) return;
             _restored = true;
             if (!IsWindow(_hwnd)) return;
+            if (_byRegion)
+            {
+                SetWindowRgn(_hwnd, IntPtr.Zero, true);
+                return;
+            }
             SetLayeredWindowAttributes(_hwnd, 0, _alpha, LWA_ALPHA);
             if (!_wasLayered) SetWindowLong(_hwnd, GWL_EXSTYLE, GetWindowLong(_hwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
         }
@@ -679,6 +967,13 @@ public static class Genie
     private struct POINT { public int X, Y; }
 
     private const uint EVENT_SYSTEM_MINIMIZESTART = 0x0016;
+    private const uint EVENT_OBJECT_CREATE = 0x8000;
+    private const uint EVENT_OBJECT_DESTROY = 0x8001;
+    private const int HTCLOSE = 20;
+    private const uint WM_CLOSE = 0x0010;
+    [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hwnd, IntPtr rgn, bool redraw);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
     private const uint WM_NCHITTEST = 0x0084;
     private const int HTMINBUTTON = 8;
     private const uint SMTO_ABORTIFHUNG = 0x2;

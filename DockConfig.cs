@@ -15,13 +15,6 @@ public class DockEntry
     /// <summary>ストアアプリなど「shell:AppsFolder\…」形式で登録されたアプリか</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsShellApp => Path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Dock から起動したときに出てきたウィンドウ（保存はしない）。
-    /// プロセス名から探せないアプリ（ストアアプリ・.url・ランチャー経由など）でも、もう一度押したらしまえるようにする。
-    /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore]
-    public IntPtr LaunchedWindow { get; set; }
 }
 
 /// <summary>見た目などの設定</summary>
