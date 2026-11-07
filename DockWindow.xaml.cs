@@ -125,8 +125,9 @@ public partial class DockWindow : Window
         Genie.AnimationsEnabled = () => _settings.OpenAnimation;
 
         // タイトルバーの最小化ボタンでしまうときも、Dock のアイコンへ吸い込ませる
+        // Dock にないアプリも対象（そのときは Dock の右端へしまう）
         Genie.WatchTitleBarMinimize(
-            hwnd => _settings.OpenAnimation && FindDockItem(hwnd) != null,
+            hwnd => _settings.OpenAnimation && !IsOwnWindow(hwnd),
             RevealIconFor,
             () => DpiScale);
     }
@@ -163,12 +164,22 @@ public partial class DockWindow : Window
 
     private DateTime _forceShowUntil = DateTime.MinValue;
 
+    /// <summary>Islandock 自身のウィンドウ（設定画面など）か</summary>
+    private static bool IsOwnWindow(IntPtr hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        return pid == OwnProcessId;
+    }
+
     /// <summary>Dock を（隠れていれば）出して、アプリのアイコンの「出たときの」位置を返す</summary>
     private Rect RevealIconFor(IntPtr hwnd)
     {
         var item = FindDockItem(hwnd);
+        if (item != null)
+            AppWindows.Remember(hwnd, item.Entry); // タイトルが変わっても、このアイコンのウィンドウだと分かるように
+        else
+            item = _trash ?? _items.LastOrDefault(); // Dock にないアプリは、macOS と同じく右端（ごみ箱のあたり）へ
         if (item == null) return Rect.Empty;
-        AppWindows.Remember(hwnd, item.Entry); // タイトルが変わっても、このアイコンのウィンドウだと分かるように
         _forceShowUntil = DateTime.Now + TimeSpan.FromMilliseconds(1100);
         _dockShown = true;
         var r = IconRectPx(item);
@@ -710,6 +721,29 @@ public partial class DockWindow : Window
         _minimizedBatch.Remove(item.Entry);
         RestoreWindows(item, restore);
         return true;
+    }
+
+    /// <summary>開発用: そのアプリのウィンドウ一覧（アイコンに乗せたときの一覧）を画面に出して、何枚並んだかを返す</summary>
+    internal static async Task<List<string>> PreviewTest(string entryName)
+    {
+        AppWindows.Start();
+        var log = new List<string>();
+        var entry = DockConfig.Load().FirstOrDefault(e => e.Name == entryName);
+        if (entry == null) { log.Add("Dock にない: " + entryName); return log; }
+        var item = new DockItem(entry, 48, 4);
+        string name = System.IO.Path.GetFileNameWithoutExtension(item.TargetPath);
+        var all = FindAppWindows(item, name);
+        var windows = all.Where(h => !WindowPreview.IsCloaked(h)).ToList();
+        log.Add($"見つかったウィンドウ {all.Count} 個（別の仮想デスクトップを除くと {windows.Count} 個）");
+        var preview = new WindowPreview(item, windows, DockTheme.Current(), _ => { });
+        var area = SystemParameters.WorkArea;
+        preview.ShowAbove(new Point(area.Left + area.Width / 2, area.Bottom - 80));
+        await Task.Delay(1200);
+        log.Add($"一覧の大きさ {preview.ActualWidth:F0}x{preview.ActualHeight:F0} 位置 {preview.Left:F0},{preview.Top:F0}  画面の作業領域 {area.Left},{area.Top},{area.Right},{area.Bottom}");
+        log.Add($"並んだカード {preview.CardCount} 枚");
+        preview.Close();
+        AppWindows.Stop();
+        return log;
     }
 
     /// <summary>開発用: Dock の各アプリについて、そのアプリのウィンドウとして見つかるものを一覧にする</summary>

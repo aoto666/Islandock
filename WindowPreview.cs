@@ -15,10 +15,12 @@ namespace Islandock;
 /// </summary>
 public sealed class WindowPreview : Window
 {
-    private const double ThumbWidth = 200;
-    private const double ThumbHeight = 120;
+    // 縮小画像の大きさ（ウィンドウがとても多いときは少し小さくする）
+    private double _thumbWidth = 200;
+    private double _thumbHeight = 120;
 
-    private readonly StackPanel _cards = new() { Orientation = Orientation.Horizontal };
+    // 画面の幅に収まらないときは、次の段へ折り返す（はみ出して見えなくならないように）
+    private readonly WrapPanel _cards = new() { Orientation = Orientation.Horizontal };
     private readonly Action<IntPtr> _activate;
     private readonly DockTheme _theme;
     private readonly ImageSource? _appIcon;
@@ -34,6 +36,9 @@ public sealed class WindowPreview : Window
         public FrameworkElement Fallback = null!;
         public IntPtr Handle;
     }
+
+    /// <summary>開発用: 並んでいるカードの数</summary>
+    internal int CardCount => _cards.Children.Count;
 
     /// <summary>ウィンドウの一覧を出しているアプリ</summary>
     public DockItem Item { get; }
@@ -57,6 +62,13 @@ public sealed class WindowPreview : Window
 
         Content = new Border { Child = _cards, Padding = new Thickness(6) };
 
+        if (windows.Count > 16)
+        {
+            _thumbWidth = 150;
+            _thumbHeight = 90;
+        }
+        var area = SystemParameters.WorkArea;
+        _cards.MaxWidth = Math.Max(_thumbWidth + 40, area.Width - 40);
         foreach (var h in windows) _cards.Children.Add(CreateCard(h));
         SizeChanged += (_, _) => Place();
         LayoutUpdated += (_, _) => UpdateThumbs();
@@ -100,7 +112,7 @@ public sealed class WindowPreview : Window
         var area = SystemParameters.WorkArea;
         double w = ActualWidth, h = ActualHeight;
         Left = Math.Clamp(_anchor.X - w / 2, area.Left, Math.Max(area.Left, area.Right - w));
-        Top = _anchor.Y - h - 8;
+        Top = Math.Max(area.Top, _anchor.Y - h - 8);
     }
 
     // ===================== 縮小画像（DWM） =====================
@@ -202,7 +214,7 @@ public sealed class WindowPreview : Window
         // 下段: 縮小画像を描く場所（描けないときはアプリのアイコンを大きく）
         var fallback = new Image { Source = _appIcon, Width = 48, Height = 48 };
         RenderOptions.SetBitmapScalingMode(fallback, BitmapScalingMode.HighQuality);
-        var thumbHost = new Grid { Width = ThumbWidth, Height = ThumbHeight };
+        var thumbHost = new Grid { Width = _thumbWidth, Height = _thumbHeight };
         thumbHost.Children.Add(fallback);
         var thumb = new Thumb { Source = hwnd, Host = thumbHost, Fallback = fallback };
         _thumbs.Add(thumb);
@@ -219,7 +231,7 @@ public sealed class WindowPreview : Window
             Padding = new Thickness(8),
             CornerRadius = new CornerRadius(8),
             Background = Brushes.Transparent,
-            Margin = new Thickness(2, 0, 2, 0),
+            Margin = new Thickness(2, 2, 2, 2),
             Cursor = Cursors.Hand,
             ToolTip = title,
         };

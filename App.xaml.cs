@@ -116,10 +116,31 @@ public partial class App : Application
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Genie.AnimationsEnabled = () => true;
             var trace = new List<string>();
-            Genie.CloseTrace = m => trace.Add($"{DateTime.Now:HH:mm:ss.fff} {m}");
+            Genie.Trace = m => trace.Add($"{DateTime.Now:HH:mm:ss.fff} {m}");
             Genie.CloseWithAnimation(new IntPtr(Convert.ToInt64(e.Args[1], 16)));
             Exit += (_, _) => System.IO.File.WriteAllLines(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "islandock_close_trace.txt"), trace);
             QuitAfter(3);
+            return;
+        }
+
+        // 開発用: Islandock.exe --anim-test 出力.txt "exe|引数" ... で、いろいろなアプリで格納・終了のアニメーションを確かめる
+        if (e.Args.Length >= 3 && e.Args[0] == "--anim-test")
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            AnimTest(e.Args[1], e.Args.Skip(2).ToArray());
+            return;
+        }
+
+        // 開発用: Islandock.exe --preview-test 出力.txt Dockの名前 で、ウィンドウ一覧の並び方を確かめる
+        if (e.Args.Length == 3 && e.Args[0] == "--preview-test")
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            Dispatcher.InvokeAsync(async () =>
+            {
+                var lines = await DockWindow.PreviewTest(e.Args[2]);
+                System.IO.File.WriteAllLines(e.Args[1], lines);
+                Shutdown();
+            });
             return;
         }
 
@@ -233,6 +254,103 @@ public partial class App : Application
         quit.Tick += (_, _) => Shutdown();
         quit.Start();
     }
+
+    private async void AnimTest(string output, string[] targets)
+    {
+        var log = new List<string>();
+        var (icon, dpi) = TestIcon();
+        Genie.AnimationsEnabled = () => true;
+        Genie.WatchTitleBarMinimize(_ => true, _ => icon, () => dpi);
+        var trace = new List<string>();
+        Genie.Trace = m => trace.Add(m);
+        uint own = (uint)Environment.ProcessId;
+
+        foreach (var spec in targets)
+        {
+            var parts = spec.Split('|');
+            log.Add($"===== {parts[0]} {(parts.Length > 1 ? parts[1] : "")}");
+            try
+            {
+                var before = NativeMethods.GetVisibleTopWindows();
+                IntPtr given = parts[0].StartsWith("hwnd:") ? new IntPtr(Convert.ToInt64(parts[0][5..], 16)) : IntPtr.Zero;
+                if (given == IntPtr.Zero) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(parts[0], parts.Length > 1 ? parts[1] : "") { UseShellExecute = true });
+                IntPtr hwnd = given;
+                for (int i = 0; i < 60 && hwnd == IntPtr.Zero; i++)
+                {
+                    await Task.Delay(200);
+                    hwnd = NativeMethods.GetVisibleTopWindows().FirstOrDefault(h =>
+                    {
+                        if (before.Contains(h) || !NativeMethods.IsLikelyAppWindow(h)) return false;
+                        NativeMethods.GetWindowThreadProcessId(h, out uint pid);
+                        return pid != own;
+                    });
+                }
+                if (hwnd == IntPtr.Zero) { log.Add("  ウィンドウが見つからない"); continue; }
+                await Task.Delay(1500); // 中身が描かれるまで待つ
+                var cls = new System.Text.StringBuilder(128);
+                NativeMethods.GetClassName(hwnd, cls, cls.Capacity);
+                log.Add($"  window {hwnd.ToInt64():X} class={cls}");
+
+                // --- 格納（最小化） ---
+                BringToFront(hwnd);
+                await Task.Delay(400);
+                var (mx, my) = Genie.DevButtonPoint(hwnd, 2);
+                int hit = Genie.DevDetect(hwnd, mx, my, out IntPtr top);
+                log.Add($"  最小化ボタン ({mx},{my}): 判定={(hit == Genie.DevHTMINBUTTON ? "最小化ボタン" : hit.ToString())} 手前のウィンドウ一致={top == hwnd} {Describe(top)}");
+                trace.Clear();
+                bool prepared = Genie.DevPrepareMinimize(hwnd);
+                NativeMethods.SendMessage(hwnd, 0x0112, (IntPtr)0xF020, IntPtr.Zero); // WM_SYSCOMMAND SC_MINIMIZE（ボタンを押したのと同じ）
+                await Task.Delay(1200);
+                log.Add($"  格納: 準備={prepared} 最小化された={NativeMethods.IsIconic(hwnd)} 記録=[{string.Join(", ", trace)}]");
+
+                // --- 終了 ---
+                NativeMethods.ShowWindow(hwnd, 9); // SW_RESTORE
+                await Task.Delay(700);
+                BringToFront(hwnd);
+                await Task.Delay(400);
+                var (cx, cy) = Genie.DevButtonPoint(hwnd, 0);
+                int chit = Genie.DevDetect(hwnd, cx, cy, out IntPtr ctop);
+                log.Add($"  閉じるボタン ({cx},{cy}): 判定={(chit == Genie.DevHTCLOSE ? "閉じるボタン" : chit.ToString())} 手前のウィンドウ一致={ctop == hwnd}");
+                trace.Clear();
+                Genie.CloseWithAnimation(hwnd);
+                await Task.Delay(1800);
+                log.Add($"  終了: 閉じた={!NativeMethods.IsWindow(hwnd)} 記録=[{string.Join(", ", trace)}]");
+            }
+            catch (Exception ex)
+            {
+                log.Add("  エラー: " + ex.Message);
+            }
+        }
+        System.IO.File.WriteAllLines(output, log);
+        Shutdown();
+    }
+
+    private static string Describe(IntPtr h)
+    {
+        if (h == IntPtr.Zero) return "(なし)";
+        var c = new System.Text.StringBuilder(128);
+        NativeMethods.GetClassName(h, c, c.Capacity);
+        NativeMethods.GetWindowThreadProcessId(h, out uint pid);
+        string name = "";
+        try { using var p = System.Diagnostics.Process.GetProcessById((int)pid); name = p.ProcessName; } catch { }
+        NativeMethods.GetWindowRect(h, out var r);
+        return $"[手前={h.ToInt64():X} {c} {name} ex={NativeMethods.GetWindowLong(h, NativeMethods.GWL_EXSTYLE):X} rect={r.Left},{r.Top},{r.Right},{r.Bottom}]";
+    }
+
+    /// <summary>ほかのアプリが手前にあっても、そのウィンドウを手前に出す（開発用）</summary>
+    private static void BringToFront(IntPtr hwnd)
+    {
+        var fg = NativeMethods.GetForegroundWindow();
+        uint fgThread = NativeMethods.GetWindowThreadProcessId(fg, out _);
+        uint me = GetCurrentThreadId();
+        bool attached = fgThread != 0 && fgThread != me && AttachThreadInput(me, fgThread, true);
+        NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040);
+        NativeMethods.SetForegroundWindow(hwnd);
+        if (attached) AttachThreadInput(me, fgThread, false);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool AttachThreadInput(uint a, uint b, bool attach);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
 
     protected override void OnExit(ExitEventArgs e)
     {

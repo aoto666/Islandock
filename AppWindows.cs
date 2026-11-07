@@ -148,16 +148,24 @@ internal static class AppWindows
 
     private static string Normalize(string s) => s.Replace(" ", "").Replace("　", "").ToLowerInvariant();
 
-    /// <summary>ターミナル / コンソールのウィンドウで、タイトルがそのアプリらしいもの</summary>
+    /// <summary>
+    /// ターミナル / コンソールのウィンドウのうち、そのアプリが中で動いているもの。
+    ///  ・ターミナルのウィンドウには、タブごとに見えない「疑似コンソール」のウィンドウがひも付いていて、
+    ///    その持ち主のプロセスが、中で動いているシェル（powershell / cmd など）になっている。これで判断する
+    ///  ・それで分からないもの（古い形のコンソールなど）は、タイトルで判断する
+    /// </summary>
     public static List<IntPtr> ConsoleWindowsOf(DockEntry entry, string exePath)
     {
         var result = new List<IntPtr>();
         if (!IsConsoleApp(exePath)) return result;
+        string shell = Path.GetFileNameWithoutExtension(exePath);
+        foreach (var (owner, name) in HostedShells())
+            if (name.Equals(shell, StringComparison.OrdinalIgnoreCase) && !result.Contains(owner)) result.Add(owner);
         var words = TitleKeywords(entry, exePath);
         if (words.Count == 0) return result;
         EnumWindows((h, _) =>
         {
-            if (IsLikelyAppWindow(h) && ConsoleWindowClasses.Contains(ClassOf(h)))
+            if (!result.Contains(h) && IsLikelyAppWindow(h) && ConsoleWindowClasses.Contains(ClassOf(h)))
             {
                 string title = Normalize(TitleOf(h));
                 if (words.Any(w => title.Contains(w))) result.Add(h);
@@ -165,6 +173,42 @@ internal static class AppWindows
             return true;
         }, IntPtr.Zero);
         return result;
+    }
+
+    private static List<(IntPtr Owner, string Shell)> _hostedCache = new();
+    private static DateTime _hostedAt = DateTime.MinValue;
+
+    /// <summary>（ターミナルのウィンドウ, 中で動いているシェルの名前）の一覧。何度も呼ばれるので 1 秒だけ覚えておく</summary>
+    private static List<(IntPtr Owner, string Shell)> HostedShells()
+    {
+        if (DateTime.Now - _hostedAt < TimeSpan.FromSeconds(1)) return _hostedCache;
+        var list = new List<(IntPtr, string)>();
+        var names = new Dictionary<uint, string>();
+        EnumWindows((h, _) =>
+        {
+            if (ClassOf(h) != "PseudoConsoleWindow") return true;
+            IntPtr owner = GetWindow(h, GW_OWNER);
+            if (owner == IntPtr.Zero || !IsWindowVisible(owner)) return true;
+            GetWindowThreadProcessId(h, out uint pid);
+            if (!names.TryGetValue(pid, out var name))
+            {
+                try
+                {
+                    using var p = Process.GetProcessById((int)pid);
+                    name = p.ProcessName;
+                }
+                catch
+                {
+                    name = "";
+                }
+                names[pid] = name;
+            }
+            if (name.Length > 0) list.Add((owner, name));
+            return true;
+        }, IntPtr.Zero);
+        _hostedCache = list;
+        _hostedAt = DateTime.Now;
+        return list;
     }
 
     /// <summary>ウィンドウを、画面の手前にあるものから順に並べる</summary>

@@ -160,6 +160,9 @@ internal static class NativeMethods
     public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
 
     [DllImport("user32.dll")]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
 
     [DllImport("user32.dll")]

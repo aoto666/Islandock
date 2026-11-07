@@ -176,7 +176,7 @@ public static class Genie
     /// ふつうのアプリのウィンドウか（小さなポップアップや通知などは除く）。
     /// allowDirectComposition: Chrome などの「透明にできない描き方」のウィンドウも含める（しまう・戻すとき用）
     /// </summary>
-    private static bool IsAppWindow(IntPtr hwnd, bool allowDirectComposition = false)
+    private static bool IsAppWindow(IntPtr hwnd, bool allowDirectComposition = false, bool allowFrameHost = false)
     {
         if (GetAncestor(hwnd, GA_ROOT) != hwnd || GetWindow(hwnd, GW_OWNER) != IntPtr.Zero) return false;
         if (!IsWindowVisible(hwnd)) return false;
@@ -185,7 +185,8 @@ public static class Genie
         if (!allowDirectComposition && (ex & WS_EX_NOREDIRECTIONBITMAP) != 0) return false;
         if (!GetWindowRect(hwnd, out var r) || r.Right - r.Left < 320 || r.Bottom - r.Top < 200) return false;
 
-        // ストアアプリの枠は別のプロセスが描いているので、取り込み・透明化ができない
+        // ストアアプリの枠は別のプロセスが描いているので、透明化ができない（画像に写し取るだけなら大丈夫）
+        if (allowFrameHost) return true;
         var cls = new System.Text.StringBuilder(64);
         GetClassName(hwnd, cls, cls.Capacity);
         return cls.ToString() is not ("ApplicationFrameWindow" or "Windows.UI.Core.CoreWindow");
@@ -393,24 +394,22 @@ public static class Genie
         _mouseWasDown = down;
         if (!pressed || !GetCursorPos(out var pt)) return;
 
-        IntPtr hwnd = GetAncestor(WindowFromPoint(pt), GA_ROOT);
+        IntPtr hwnd = TopAppWindowAt(pt);
         if (hwnd == IntPtr.Zero || Running.Contains(hwnd) || PendingMinimize.ContainsKey(hwnd)) return;
 
         IntPtr lParam = (IntPtr)(((pt.Y & 0xFFFF) << 16) | (pt.X & 0xFFFF));
-        if (SendMessageTimeout(hwnd, WM_NCHITTEST, IntPtr.Zero, lParam, SMTO_ABORTIFHUNG, 50, out IntPtr hit) == IntPtr.Zero) return;
-        if ((int)hit == HTCLOSE)
+        if (SendMessageTimeout(hwnd, WM_NCHITTEST, IntPtr.Zero, lParam, SMTO_ABORTIFHUNG, 50, out IntPtr hitPtr) == IntPtr.Zero) return;
+        int hit = (int)hitPtr;
+        // ターミナルや VS Code などは、最小化・閉じるボタンを自分で描いているので、Windows に聞いても分からない。
+        // ウィンドウの上端あたりなら、ボタンの名前（アクセシビリティ情報）でも調べる
+        if (hit != HTMINBUTTON && hit != HTCLOSE) hit = CaptionButtonByName(hwnd, pt);
+        if (hit == HTCLOSE)
         {
             if (AnimationsEnabled?.Invoke() == true) BeginClose(hwnd, () => (GetAsyncKeyState(vk) & 0x8000) != 0, TimeSpan.FromMilliseconds(400));
             return;
         }
-        if ((int)hit != HTMINBUTTON) return;
-
-        if (IsIconic(hwnd) || !IsAppWindow(hwnd, allowDirectComposition: true)) return;
-        if (_isDockApp?.Invoke(hwnd) != true) return;
-
-        var (image, framePx) = Capture(hwnd);
-        if (image == null || !SetTransitions(hwnd, enabled: false)) return;
-        PendingMinimize[hwnd] = new Snapshot(image, framePx);
+        if (hit != HTMINBUTTON) return;
+        if (!PrepareMinimize(hwnd)) return;
 
         // ボタンの外で離すなどして最小化されなかったら、標準のアニメーションを元に戻す
         var timeout = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
@@ -422,6 +421,104 @@ public static class Genie
         };
         timeout.Start();
     }
+
+    private static readonly string[] MinimizeNames = { "最小化", "Minimize" };
+    private static readonly string[] CloseNames = { "閉じる", "Close" };
+
+    /// <summary>
+    /// その場所にあるアプリのウィンドウ（いちばん手前のもの）。
+    /// Islandock 自身の透明なウィンドウ（画面上部のアイランドなど）は飛ばす
+    /// </summary>
+    private static IntPtr TopAppWindowAt(POINT pt)
+    {
+        IntPtr found = IntPtr.Zero;
+        uint own = (uint)Environment.ProcessId;
+        EnumWindows((h, _) =>
+        {
+            if (!IsWindowVisible(h) || IsIconic(h) || !GetWindowRect(h, out var r)) return true;
+            if (pt.X < r.Left || pt.X >= r.Right || pt.Y < r.Top || pt.Y >= r.Bottom) return true;
+            GetWindowThreadProcessId(h, out uint pid);
+            if (pid == own || (GetWindowLong(h, GWL_EXSTYLE) & WS_EX_TRANSPARENT) != 0) return true;
+            found = h;
+            return false;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    /// <summary>
+    /// 押された場所が「最小化」「閉じる」ボタンなら HTMINBUTTON / HTCLOSE（違えば 0）。
+    /// ボタンを自分で描いているアプリ用: まずボタンの名前で調べ、分からなければタイトルバーの右上の位置で判断する
+    /// （Windows 11 の標準の並び: 右から 閉じる・最大化・最小化、それぞれ 46px 幅）
+    /// </summary>
+    private static int CaptionButtonByName(IntPtr hwnd, POINT pt)
+    {
+        if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) != 0 &&
+            !GetWindowRect(hwnd, out r)) return 0;
+        double scale = GetDpiForWindow(hwnd) / 96.0;
+        if (scale <= 0) scale = 1;
+        // タイトルバーのあたり（上端から 40px・右端から 3 つ分）だけ調べる
+        if (pt.Y - r.Top > 40 * scale || pt.Y < r.Top || r.Right - pt.X > 46 * 3 * scale || pt.X > r.Right) return 0;
+        int byPosition = (int)((r.Right - pt.X) / (46 * scale)) switch { 0 => HTCLOSE, 2 => HTMINBUTTON, _ => 0 };
+        try
+        {
+            var el = System.Windows.Automation.AutomationElement.FromPoint(new Point(pt.X, pt.Y));
+            if (el != null && el.Current.ProcessId == Environment.ProcessId) return byPosition; // アイランドなどに当たった
+            for (int i = 0; el != null && i < 3; i++)
+            {
+                var cur = el.Current;
+                if (cur.ControlType == System.Windows.Automation.ControlType.Button)
+                {
+                    string name = cur.Name ?? "";
+                    if (MinimizeNames.Any(n => name.Equals(n, StringComparison.OrdinalIgnoreCase))) return HTMINBUTTON;
+                    if (CloseNames.Any(n => name.Equals(n, StringComparison.OrdinalIgnoreCase))) return HTCLOSE;
+                    return 0;
+                }
+                el = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(el);
+            }
+        }
+        catch
+        {
+        }
+        return byPosition;
+    }
+
+    /// <summary>最小化ボタンが押された: 見えているうちに中身を写し取り、Windows 標準のアニメーションを止めておく</summary>
+    private static bool PrepareMinimize(IntPtr hwnd)
+    {
+        if (IsIconic(hwnd) || !IsAppWindow(hwnd, allowDirectComposition: true, allowFrameHost: true)) { Trace?.Invoke("minimize: skip (not app window)"); return false; }
+        if (_isDockApp?.Invoke(hwnd) != true) { Trace?.Invoke("minimize: skip (excluded)"); return false; }
+        var (image, framePx) = Capture(hwnd);
+        if (image == null) { Trace?.Invoke("minimize: skip (capture failed)"); return false; }
+        if (!SetTransitions(hwnd, enabled: false)) { Trace?.Invoke("minimize: skip (transitions)"); return false; }
+        PendingMinimize[hwnd] = new Snapshot(image, framePx);
+        return true;
+    }
+
+    // ===================== 開発用: アニメーションの確認 =====================
+
+    /// <summary>押された場所から、どのボタンと判断するか（実際の判定と同じ処理）。top: その場所のいちばん手前のウィンドウ</summary>
+    internal static int DevDetect(IntPtr hwnd, int x, int y, out IntPtr top)
+    {
+        var pt = new POINT { X = x, Y = y };
+        top = TopAppWindowAt(pt);
+        IntPtr lParam = (IntPtr)(((pt.Y & 0xFFFF) << 16) | (pt.X & 0xFFFF));
+        SendMessageTimeout(hwnd, WM_NCHITTEST, IntPtr.Zero, lParam, SMTO_ABORTIFHUNG, 200, out IntPtr hitPtr);
+        int hit = (int)hitPtr;
+        if (hit != HTMINBUTTON && hit != HTCLOSE) hit = CaptionButtonByName(hwnd, pt);
+        return hit;
+    }
+
+    /// <summary>右から index 番目（0 = 閉じる, 2 = 最小化）のボタンの真ん中（Windows 11 の標準の並び）</summary>
+    internal static (int X, int Y) DevButtonPoint(IntPtr hwnd, int index)
+    {
+        if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) != 0) GetWindowRect(hwnd, out r);
+        double scale = GetDpiForWindow(hwnd) / 96.0;
+        if (scale <= 0) scale = 1;
+        return ((int)(r.Right - 46 * (index + 0.5) * scale), (int)(r.Top + 16 * scale));
+    }
+
+    internal static bool DevPrepareMinimize(IntPtr hwnd) => PrepareMinimize(hwnd);
+    internal const int DevHTMINBUTTON = HTMINBUTTON, DevHTCLOSE = HTCLOSE;
 
     private static void CancelPending(IntPtr hwnd)
     {
@@ -455,6 +552,7 @@ public static class Genie
 
             overlay = new GenieWindow(snap.Image, ToDip(snap.FramePx, dpi), ToDip(iconPx, dpi), startAtIcon: false);
             overlay.Show();
+            Trace?.Invoke("minimize: animation played");
             await overlay.PlayAsync(Duration, reverse: true);
         }
         catch
@@ -487,7 +585,7 @@ public static class Genie
     }
 
     /// <summary>開発用: 閉じるアニメーションの経過（確認用）</summary>
-    public static Action<string>? CloseTrace { get; set; }
+    public static Action<string>? Trace { get; set; }
 
     /// <summary>
     /// 見えている今のうちに中身を写し取り、まったく同じ位置に重ねておく。
@@ -497,10 +595,10 @@ public static class Genie
     private static void BeginClose(IntPtr hwnd, Func<bool> stillPressing, TimeSpan wait)
     {
         if (PendingClose.Contains(hwnd) || Running.Contains(hwnd)) return;
-        if (IsIconic(hwnd) || !IsAppWindow(hwnd, allowDirectComposition: true)) { CloseTrace?.Invoke("skip: not app window"); return; }
+        if (IsIconic(hwnd) || !IsAppWindow(hwnd, allowDirectComposition: true, allowFrameHost: true)) { Trace?.Invoke("close: skip (not app window)"); return; }
         var (image, framePx) = Capture(hwnd);
-        if (image == null) { CloseTrace?.Invoke("skip: capture failed"); return; }
-        CloseTrace?.Invoke($"overlay shown {framePx}");
+        if (image == null) { Trace?.Invoke("close: skip (capture failed)"); return; }
+        Trace?.Invoke("close: overlay shown");
 
         double dpi = _dpiScale?.Invoke() ?? 1;
         var overlay = new CloseWindow(image, ToDip(framePx, dpi));
@@ -516,7 +614,7 @@ public static class Genie
             {
                 timer.Stop();
                 PendingClose.Remove(hwnd);
-                CloseTrace?.Invoke("window closed -> play");
+                Trace?.Invoke("close: animation played");
                 overlay.PlayClose();
                 if (transitionsOff && IsWindow(hwnd)) SetTransitions(hwnd, enabled: true);
                 return;
@@ -982,6 +1080,9 @@ public static class Genie
     private const int VK_RBUTTON = 0x02;
 
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT pt);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
+    private delegate bool EnumWindowsProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc proc, IntPtr l);
     [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(POINT pt);
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vk);
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
