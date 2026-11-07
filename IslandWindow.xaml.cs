@@ -54,6 +54,8 @@ public partial class IslandWindow : Window
         RenderCalendar();
         UpdateBgmButtons();
         ShowTab(Tab.Calendar);
+        ApplyFeatureSettings();
+        App.SettingsChanged += ApplyFeatureSettings;
 
         _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _clock.Tick += (_, _) => UpdateClock();
@@ -162,6 +164,7 @@ public partial class IslandWindow : Window
     private void Expand(Tab? tab = null)
     {
         if (_expanded || _alert?.Sticky == true) return;
+        if (FirstEnabledTab() == null) return; // 開いて見せるものがない（設定ですべてオフ）
         if (_alert != null) DismissAlert();
         _expanded = true;
 
@@ -329,8 +332,37 @@ public partial class IslandWindow : Window
     private void OnTimerTab(object sender, RoutedEventArgs e) => ShowTab(Tab.Timer);
     private void OnCalendarTab(object sender, RoutedEventArgs e) => ShowTab(Tab.Calendar);
 
+    // ===== 設定（機能ごとのオン / オフ） =====
+
+    private static IslandSettings Features => IslandConfig.Load();
+
+    private static bool TabEnabled(Tab tab) => tab switch
+    {
+        Tab.Media => Features.ShowMedia,
+        Tab.Timer => Features.ShowTimer,
+        Tab.Calendar => Features.ShowCalendar,
+        _ => Features.ShowFileShare,
+    };
+
+    private static Tab? FirstEnabledTab() =>
+        new[] { Tab.Calendar, Tab.Media, Tab.Timer, Tab.AirDrop }.Where(TabEnabled).Cast<Tab?>().FirstOrDefault();
+
+    /// <summary>設定画面での変更をタブ・小さいときの表示・ランプに反映する</summary>
+    private void ApplyFeatureSettings()
+    {
+        MediaTab.Visibility = Features.ShowMedia ? Visibility.Visible : Visibility.Collapsed;
+        TimerTab.Visibility = Features.ShowTimer ? Visibility.Visible : Visibility.Collapsed;
+        CalendarTab.Visibility = Features.ShowCalendar ? Visibility.Visible : Visibility.Collapsed;
+        AirDropTab.Visibility = Features.ShowFileShare ? Visibility.Visible : Visibility.Collapsed;
+
+        if (FirstEnabledTab() == null) Collapse();
+        else if (!TabEnabled(_tab)) ShowTab(_tab);
+        UpdateCompact();
+    }
+
     private void ShowTab(Tab tab)
     {
+        if (!TabEnabled(tab)) tab = FirstEnabledTab() ?? tab;
         _tab = tab;
         MediaView.Visibility = tab == Tab.Media ? Visibility.Visible : Visibility.Collapsed;
         TimerView.Visibility = tab == Tab.Timer ? Visibility.Visible : Visibility.Collapsed;

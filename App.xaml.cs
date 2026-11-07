@@ -8,6 +8,33 @@ namespace Islandock;
 public partial class App : Application
 {
     private Mutex? _mutex;
+    private static IslandWindow? _island;
+
+    /// <summary>設定画面で設定が変わったときに呼ばれる（Dock・アイランドが見た目を更新する）</summary>
+    public static event Action? SettingsChanged;
+
+    /// <summary>設定を変えたら呼ぶ。アイランドの表示 / 非表示・色などをまとめて反映する</summary>
+    public static void NotifySettingsChanged()
+    {
+        DockTheme.Current().ApplyMenuResources();
+        ApplyIslandEnabled();
+        ClockWidget.RefreshTheme();
+        SettingsChanged?.Invoke();
+    }
+
+    /// <summary>アイランドを使う設定ならアイランドを出し、使わないなら隠す</summary>
+    private static void ApplyIslandEnabled()
+    {
+        if (IslandConfig.Load().Enabled)
+        {
+            _island ??= new IslandWindow();
+            if (!_island.IsVisible) _island.Show();
+        }
+        else
+        {
+            _island?.Hide();
+        }
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -78,6 +105,14 @@ public partial class App : Application
             return;
         }
 
+        // 開発用: Islandock.exe --preview-settings (light|dark) 出力.png
+        if (e.Args.Length == 3 && e.Args[0] == "--preview-settings")
+        {
+            SettingsWindow.RenderPreview(e.Args[2], e.Args[1] == "dark");
+            Shutdown();
+            return;
+        }
+
         // 開発用: Islandock.exe --preview-clock 出力.png
         if (e.Args.Length == 2 && e.Args[0] == "--preview-clock")
         {
@@ -95,12 +130,15 @@ public partial class App : Application
         }
 
         new DockWindow().Show();
-        new IslandWindow().Show();
+        ApplyIslandEnabled();
         ClockWidget.ShowIfEnabled();
+        DesktopRightClick.Start();
+        StartupRegistration.RefreshPath();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        DesktopRightClick.Stop();
         _mutex?.Dispose();
         base.OnExit(e);
     }

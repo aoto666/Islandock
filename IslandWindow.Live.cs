@@ -132,14 +132,14 @@ public partial class IslandWindow
     private List<Activity> Activities()
     {
         var list = new List<Activity>();
-        if (_timerStarted) list.Add(Activity.Timer);
-        if (_stopwatch.IsRunning || _stopwatch.Elapsed > TimeSpan.Zero) list.Add(Activity.Stopwatch);
+        if (Features.ShowTimer && _timerStarted) list.Add(Activity.Timer);
+        if (Features.ShowTimer && (_stopwatch.IsRunning || _stopwatch.Elapsed > TimeSpan.Zero)) list.Add(Activity.Stopwatch);
         if (MediaVisible) list.Add(Activity.Media);
         return list;
     }
 
     /// <summary>再生中か、一時停止してから 30 秒以内なら表示する</summary>
-    private bool MediaVisible => _media?.Current != null &&
+    private bool MediaVisible => Features.ShowMedia && _media?.Current != null &&
                                  (_media.Current.IsPlaying || DateTime.Now - _lastPlayingAt < TimeSpan.FromSeconds(30));
 
     private static Tab TabOf(Activity a) => a switch
@@ -254,7 +254,8 @@ public partial class IslandWindow
         }
         Bubble.Visibility = showBubble ? Visibility.Visible : Visibility.Collapsed;
 
-        bool mic = _privacy.MicApps.Count > 0, cam = _privacy.CameraApps.Count > 0;
+        bool mic = Features.ShowPrivacy && _privacy.MicApps.Count > 0;
+        bool cam = Features.ShowPrivacy && _privacy.CameraApps.Count > 0;
         MicDot.Visibility = mic ? Visibility.Visible : Visibility.Collapsed;
         CameraDot.Visibility = cam ? Visibility.Visible : Visibility.Collapsed;
         PrivacyDots.Visibility = mic || cam ? Visibility.Visible : Visibility.Collapsed;
@@ -714,6 +715,9 @@ public partial class IslandWindow
         // 大きく開いて操作している最中は、急ぎでないお知らせは出さない
         if (_expanded && !sticky) return;
         if (_alert?.Sticky == true && !sticky) return;
+        // 設定でお知らせをオフにしているときは、音量・充電などは出さない（タイマー終了・受信は出す）
+        if (!Features.ShowAlerts && kind is "volume" or "mute" or "device" or "power" or "privacy") return;
+        if (!Features.ShowPrivacy && kind == "privacy") return;
 
         _alert = new Alert(kind, width, height, sticky);
         AlertLeft.Content = left;

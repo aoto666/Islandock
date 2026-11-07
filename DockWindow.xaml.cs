@@ -102,6 +102,15 @@ public partial class DockWindow : Window
         // タスクバーの設定変更で位置を直す / ライト・ダーク切替に追従する
         SystemParameters.StaticPropertyChanged += OnSystemParametersChanged;
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        App.SettingsChanged += OnSettingsChanged;
+    }
+
+    /// <summary>設定画面で何かが変わったら、見た目と並びに反映する</summary>
+    private void OnSettingsChanged()
+    {
+        ApplyTheme();
+        if (_settings.ShowTrash != (_trash != null)) RebuildItems();
+        if (_settings.AutoAddDesktopApps) SyncDesktopApps(rebuild: true);
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -158,6 +167,7 @@ public partial class DockWindow : Window
         CompositionTarget.Rendering -= OnRendering;
         SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        App.SettingsChanged -= OnSettingsChanged;
         _runningTimer.Stop();
         _desktopTimer.Stop();
         _previewTimer.Stop();
@@ -195,7 +205,7 @@ public partial class DockWindow : Window
 
         DockBackground.BorderBrush = _theme.OuterBorder;
         DockInner.BorderBrush = _theme.InnerHighlight;
-        DockInner.Background = _theme.BackgroundTint;
+        DockInner.Background = _theme.BackgroundFor(_settings.DockTransparency);
 
         NameLabel.Background = _theme.LabelBackground;
         NameLabel.BorderBrush = _theme.LabelBorder;
@@ -901,6 +911,9 @@ public partial class DockWindow : Window
     private void ShowDockMenu()
     {
         var menu = new ContextMenu();
+
+        menu.Items.Add(Item("Islandock の設定...", SettingsWindow.Open));
+        menu.Items.Add(new Separator());
 
         var magnify = new MenuItem { Header = "拡大", IsCheckable = true, IsChecked = _settings.Magnification };
         magnify.Click += (_, _) =>

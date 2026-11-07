@@ -11,6 +11,33 @@ public class IslandSettings
     /// v= 付きの URL にすると、その動画から再生リストが流れる。
     /// </summary>
     public string BgmPlaylist { get; set; } = "";
+
+    /// <summary>アイランドそのものを使う</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>「再生中」（音楽の表示と操作）</summary>
+    public bool ShowMedia { get; set; } = true;
+
+    /// <summary>「タイマー / ストップウォッチ」</summary>
+    public bool ShowTimer { get; set; } = true;
+
+    /// <summary>「カレンダー」</summary>
+    public bool ShowCalendar { get; set; } = true;
+
+    /// <summary>「ファイル共有」（近距離共有・スマホから受け取る）</summary>
+    public bool ShowFileShare { get; set; } = true;
+
+    /// <summary>音量・充電・出力先などのお知らせ</summary>
+    public bool ShowAlerts { get; set; } = true;
+
+    /// <summary>マイク / カメラを使っている間のランプ</summary>
+    public bool ShowPrivacy { get; set; } = true;
+
+    /// <summary>
+    /// このバージョンが知らない項目（別のバージョンが書いたものなど）。保存するときに消さずにそのまま残す。
+    /// </summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? Extra { get; set; }
 }
 
 public static class IslandConfig
@@ -20,7 +47,12 @@ public static class IslandConfig
     public static string ConfigPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Islandock", "island.json");
 
-    public static IslandSettings Load()
+    private static IslandSettings? _shared;
+
+    /// <summary>設定を返す。アプリ全体で同じものを使う</summary>
+    public static IslandSettings Load() => _shared ??= LoadFromFile();
+
+    private static IslandSettings LoadFromFile()
     {
         try
         {

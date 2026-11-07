@@ -25,7 +25,25 @@ public sealed class DockTheme
     /// <summary>すりガラスに重ねる色（AABBGGRR 形式）</summary>
     public uint AcrylicColor { get; private init; }
 
-    public static DockTheme Current() => IsSystemDark() ? Dark : Light;
+    /// <summary>Dock の背景の色（透明度は設定で変えるので、色だけ持つ）</summary>
+    public Color TintColor { get; private init; }
+
+    public static DockTheme Current() => IsDarkMode() ? Dark : Light;
+
+    /// <summary>設定（システム / ライト / ダーク）を反映した、いまダークモードかどうか</summary>
+    public static bool IsDarkMode() => DockConfig.LoadSettings().Theme switch
+    {
+        "Light" => false,
+        "Dark" => true,
+        _ => IsSystemDark(),
+    };
+
+    /// <summary>透明度（0 = 不透明 〜 100 = 完全に透明）に合わせた Dock の背景</summary>
+    public Brush BackgroundFor(double transparency)
+    {
+        byte a = (byte)Math.Round(255 * (1 - Math.Clamp(transparency, 0, 100) / 100));
+        return B(a, TintColor.R, TintColor.G, TintColor.B);
+    }
 
     public static bool IsSystemDark()
     {
@@ -58,6 +76,7 @@ public sealed class DockTheme
     {
         IsDark = false,
         BackgroundTint = B(0x50, 0xF4, 0xF4, 0xF6), // 約31%の不透明度（かなり透ける）
+        TintColor = Color.FromRgb(0xF4, 0xF4, 0xF6),
         OuterBorder = B(0x26, 0x00, 0x00, 0x00),
         InnerHighlight = B(0x80, 0xFF, 0xFF, 0xFF),
         Separator = B(0x30, 0x00, 0x00, 0x00),
@@ -74,6 +93,7 @@ public sealed class DockTheme
     {
         IsDark = true,
         BackgroundTint = B(0x50, 0x26, 0x26, 0x28), // 約31%の不透明度（かなり透ける）
+        TintColor = Color.FromRgb(0x26, 0x26, 0x28),
         OuterBorder = B(0x80, 0x00, 0x00, 0x00),
         InnerHighlight = B(0x26, 0xFF, 0xFF, 0xFF),
         Separator = B(0x40, 0xFF, 0xFF, 0xFF),

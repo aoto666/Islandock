@@ -45,11 +45,26 @@ public class DockSettings
     /// <summary>Dock の右端にごみ箱（と区切り線）を表示する</summary>
     public bool ShowTrash { get; set; } = true;
 
+    /// <summary>見た目: "System"（Windows に合わせる） / "Light" / "Dark"</summary>
+    public string Theme { get; set; } = "System";
+
+    /// <summary>Dock の背景の透明度（0 = 不透明 〜 100 = 完全に透明）</summary>
+    public double DockTransparency { get; set; } = 69;
+
+    /// <summary>デスクトップ（何もないところ）を右クリックしたときに Islandock のメニューを出す</summary>
+    public bool DesktopMenu { get; set; } = true;
+
     /// <summary>
     /// 一度でも自動追加の対象として見たデスクトップのファイル。
     /// ユーザーが Dock から削除したものを、また勝手に追加しないために覚えておく。
     /// </summary>
     public List<string> SeenDesktopItems { get; set; } = new();
+
+    /// <summary>
+    /// このバージョンが知らない項目（別のバージョンが書いたものなど）。保存するときに消さずにそのまま残す。
+    /// </summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? Extra { get; set; }
 }
 
 /// <summary>
@@ -59,7 +74,14 @@ public static class DockConfig
 {
     public static string SettingsPath => System.IO.Path.Combine(ConfigDir, "settings.json");
 
-    public static DockSettings LoadSettings()
+    private static DockSettings? _shared;
+
+    /// <summary>
+    /// 設定を返す。アプリ全体で同じものを使う（Dock と設定画面で食い違わないように）。
+    /// </summary>
+    public static DockSettings LoadSettings() => _shared ??= LoadSettingsFromFile();
+
+    private static DockSettings LoadSettingsFromFile()
     {
         try
         {

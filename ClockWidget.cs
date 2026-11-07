@@ -29,6 +29,10 @@ public class ClockSettings
     /// <summary>位置（NaN なら右上に自動配置）</summary>
     public double Left { get; set; } = double.NaN;
     public double Top { get; set; } = double.NaN;
+
+    /// <summary>このバージョンが知らない項目。保存するときに消さずにそのまま残す</summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? Extra { get; set; }
 }
 
 public static class ClockConfig
@@ -104,6 +108,9 @@ public sealed class ClockWidget : Window
         _instance.Show();
         _instance.SaveVisible(true);
     }
+
+    /// <summary>ライト / ダークの設定が変わったときに描き直す</summary>
+    public static void RefreshTheme() => _instance?.Build();
 
     public static void HideWidget()
     {
@@ -269,7 +276,7 @@ public sealed class ClockWidget : Window
 
     private static Palette GetPalette(string style)
     {
-        if (style == "Auto") style = DockTheme.IsSystemDark() ? "Dark" : "Light";
+        if (style == "Auto") style = DockTheme.IsDarkMode() ? "Dark" : "Light";
 
         switch (style)
         {
@@ -463,7 +470,7 @@ public sealed class ClockWidget : Window
         DockTheme.Current().ApplyMenuResources();
         var menu = new ContextMenu();
 
-        foreach (var (label, style) in new[] { ("透明", "Clear"), ("ライト", "Light"), ("ダーク", "Dark"), ("自動（Windows に合わせる）", "Auto") })
+        foreach (var (label, style) in new[] { ("透明", "Clear"), ("ライト", "Light"), ("ダーク", "Dark"), ("自動（ライト / ダークに合わせる）", "Auto") })
         {
             var item = new MenuItem { Header = label, IsChecked = _settings.Style == style };
             item.Click += (_, _) =>

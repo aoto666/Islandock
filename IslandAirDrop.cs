@@ -66,7 +66,7 @@ public partial class IslandWindow
     private void OnAirDropDragEnter(object sender, DragEventArgs e)
     {
         Log($"DragEnter ({((FrameworkElement)sender).Name}) ファイル={e.Data.GetDataPresent(DataFormats.FileDrop)}");
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop) || !Features.ShowFileShare) return;
         _dragOver = true;
         _dragLeaveTimer.Stop();
 
@@ -86,7 +86,8 @@ public partial class IslandWindow
 
     private void OnAirDropDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && Features.ShowFileShare
+            ? DragDropEffects.Copy : DragDropEffects.None;
         _dragOver = e.Effects != DragDropEffects.None;
         e.Handled = true;
     }
@@ -107,6 +108,7 @@ public partial class IslandWindow
         SetDropHighlight(false);
         e.Handled = true;
 
+        if (!Features.ShowFileShare) return;
         var files = FilesIn(e.Data);
         Log($"Drop {files.Count} 個: {string.Join(", ", files)}");
         if (files.Count > 0) ShareFiles(files);
