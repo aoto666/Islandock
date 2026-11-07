@@ -25,5 +25,6 @@ dock.json
 Thumbs.db
 desktop.ini
 
-# 開発用に書き出した画像
+# 開発用に書き出した画像（README 用の docs/ の中の画像は公開する）
 *.png
+!docs/**/*.png

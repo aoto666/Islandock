@@ -11,9 +11,27 @@ namespace Islandock;
 /// </summary>
 internal static class Preview
 {
-    public static void Render(string outputPath)
+    /// <summary>README 用: 自分の Dock ではなく、Windows に最初から入っているアプリだけで並べる</summary>
+    public static void RenderDemo(string outputPath)
     {
-        var entries = DockConfig.Load();
+        string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        string sys = Environment.SystemDirectory;
+        var demo = new List<DockEntry>
+        {
+            new() { Name = "エクスプローラー", Path = Path.Combine(win, "explorer.exe") },
+            new() { Name = "メモ帳", Path = Path.Combine(sys, "notepad.exe") },
+            new() { Name = "ペイント", Path = Path.Combine(sys, "mspaint.exe") },
+            new() { Name = "タスク マネージャー", Path = Path.Combine(sys, "Taskmgr.exe") },
+            new() { Name = "コマンド プロンプト", Path = Path.Combine(sys, "cmd.exe") },
+            new() { Name = "PowerShell", Path = Path.Combine(sys, @"WindowsPowerShell\v1.0\powershell.exe") },
+            new() { Name = "コントロール パネル", Path = Path.Combine(sys, "control.exe") },
+        };
+        Render(outputPath, demo.Where(e => File.Exists(e.Path)).ToList());
+    }
+
+    public static void Render(string outputPath, List<DockEntry>? entriesOverride = null)
+    {
+        var entries = entriesOverride ?? DockConfig.Load();
         var settings = DockConfig.LoadSettings();
         const double size = 84;
 

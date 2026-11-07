@@ -2,6 +2,8 @@
 
 Windows のデスクトップに、拡大アニメーション付きの **Dock** と、画面上部の **アイランド型バー** を追加するツールです。
 
+![Dock（ライト / ダーク）](docs/screenshots/dock.png)
+
 ## できること
 
 ### Dock（画面下）
@@ -19,6 +21,21 @@ Windows のデスクトップに、拡大アニメーション付きの **Dock**
 - **カレンダー**
 - **ファイル共有**: Windows の近距離共有でファイルを送る / スマホから QR コードで PC にファイルを送る
 - 充電・音量・消音などのお知らせ、マイク・カメラ使用中のランプ
+
+ふだんは小さなカプセル（時刻と日付）で、マウスを乗せると広がります。
+
+![小さいときのアイランド](docs/screenshots/island-compact.png)
+
+| カレンダー | タイマー / ストップウォッチ |
+|---|---|
+| ![カレンダー](docs/screenshots/island-calendar.png) | ![タイマー](docs/screenshots/island-timer.png) |
+| **再生中** | **ファイル共有** |
+| ![再生中](docs/screenshots/island-media.png) | ![ファイル共有](docs/screenshots/island-share.png) |
+
+### 時計ウィジェット
+Dock の背景を右クリック →「時計ウィジェットを表示」で、デスクトップにアナログ時計を置けます（スタイルは6種類）。
+
+![時計ウィジェット](docs/screenshots/clock.png)
 
 ## 動かし方
 [.NET 10 SDK](https://dotnet.microsoft.com/download) を入れてから、`start.bat` をダブルクリックするか、このフォルダでターミナルを開いて:
@@ -48,5 +65,5 @@ MIT ライセンスです。くわしくは [LICENSE](LICENSE) を見てくだ�
 
 ## 商標について
 Apple、Mac、macOS、iPhone、AirDrop、Dynamic Island は Apple Inc. の商標です。
-Windows は Microsoft Corporation の商標です。YouTube は Google LLC の商標です。
+Windows は Microsoft Corporation の商標です。画面写真に写っているアイコンは Windows に付属するアプリのものです。YouTube は Google LLC の商標です。
 このソフトウェアは個人が作った非公式のもので、Apple Inc.・Microsoft Corporation・Google LLC とは関係がなく、これらの会社が承認・提供しているものではありません。

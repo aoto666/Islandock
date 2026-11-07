@@ -22,6 +22,14 @@ public partial class App : Application
             return;
         }
 
+        // 開発用: Islandock.exe --preview-demo 出力.png で、Windows 標準アプリだけの Dock を書き出す（README 用）
+        if (e.Args.Length == 2 && e.Args[0] == "--preview-demo")
+        {
+            Preview.RenderDemo(e.Args[1]);
+            Shutdown();
+            return;
+        }
+
         // 開発用: Islandock.exe --list-apps 出力.txt で、アプリ一覧を書き出す
         if (e.Args.Length == 2 && e.Args[0] == "--list-apps")
         {
