@@ -1,0 +1,29 @@
+# ビルドすると自動で作られるフォルダ（パソコンのフォルダの場所などが入るので公開しない）
+bin/
+obj/
+publish/
+
+# Visual Studio / Rider / VS Code の個人用ファイル
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.rsuser
+
+# NuGet
+*.nupkg
+packages/
+
+# 設定ファイルや秘密の情報（念のため）
+island.json
+dock.json
+.env
+*.local.json
+
+# Windows が勝手に作るファイル
+Thumbs.db
+desktop.ini
+
+# 開発用に書き出した画像
+*.png

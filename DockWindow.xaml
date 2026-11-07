@@ -1,0 +1,59 @@
+<Window x:Class="Islandock.DockWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Islandock Dock"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        AllowDrop="True">
+
+    <!-- 透明な部分はクリックが下のウィンドウに通り抜ける -->
+    <Grid x:Name="Root">
+
+      <!-- Dock 本体（自動で隠すときはこのまま下へスライドさせる） -->
+      <Grid x:Name="DockHost">
+        <Grid.RenderTransform>
+            <TranslateTransform x:Name="DockSlide" />
+        </Grid.RenderTransform>
+
+        <!-- Dock の背景（半透明・角丸） -->
+        <Border x:Name="DockBackground"
+                VerticalAlignment="Bottom"
+                HorizontalAlignment="Center"
+                Margin="0,0,0,4"
+                BorderThickness="0">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="20" ShadowDepth="3" Direction="270" Opacity="0.18" />
+            </Border.Effect>
+            <!-- 背景の色。縁取りなし -->
+            <Border x:Name="DockInner" BorderThickness="0" />
+        </Border>
+
+        <!-- アイコンを横に並べる場所 -->
+        <StackPanel x:Name="IconPanel"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Bottom"
+                    HorizontalAlignment="Center"
+                    Margin="0,0,0,7" />
+      </Grid>
+
+        <!-- マウスを乗せたときに出るアプリ名ラベル -->
+        <Canvas IsHitTestVisible="False">
+            <Border x:Name="NameLabel"
+                    Visibility="Collapsed"
+                    CornerRadius="7"
+                    BorderThickness="0.5"
+                    Padding="11,4,11,5">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.22" />
+                </Border.Effect>
+                <TextBlock x:Name="NameText"
+                           FontSize="13"
+                           FontFamily="{StaticResource UiFont}" />
+            </Border>
+        </Canvas>
+    </Grid>
+</Window>

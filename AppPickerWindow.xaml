@@ -1,0 +1,57 @@
+<Window x:Class="Islandock.AppPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Dock にアプリを追加"
+        Width="460" Height="600"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True"
+        Topmost="True"
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Dock に追加するアプリを選んでください" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10" />
+
+        <!-- 検索欄 -->
+        <Border Grid.Row="1" Background="#0F000000" CornerRadius="8" Padding="10,6" Margin="0,0,0,10">
+            <Grid>
+                <TextBlock x:Name="SearchPlaceholder" Text="🔍 アプリ名で検索" Foreground="#888" IsHitTestVisible="False" />
+                <TextBox x:Name="SearchBox" Background="Transparent" BorderThickness="0" TextChanged="OnSearchChanged" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8">
+            <ListBox x:Name="AppList" BorderThickness="0" Background="Transparent"
+                     VirtualizingPanel.IsVirtualizing="True"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <CheckBox IsChecked="{Binding IsSelected}" IsEnabled="{Binding CanAdd}"
+                                  VerticalContentAlignment="Center" Margin="2">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="{Binding Icon}" Width="28" Height="28" Margin="6,0,10,0"
+                                       RenderOptions.BitmapScalingMode="HighQuality" />
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Note}" Foreground="#888" FontSize="11.5"
+                                           VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </CheckBox>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <DockPanel Grid.Row="3" Margin="0,12,0,0" LastChildFill="False">
+            <TextBlock x:Name="CountText" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#666" />
+            <Button x:Name="AddButton" Content="追加" Padding="20,5" Margin="8,0,0,0" DockPanel.Dock="Right"
+                    IsDefault="True" Click="OnAdd" />
+            <Button Content="キャンセル" Padding="12,5" DockPanel.Dock="Right" IsCancel="True" />
+        </DockPanel>
+    </Grid>
+</Window>
