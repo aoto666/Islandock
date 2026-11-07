@@ -57,6 +57,13 @@ public sealed class MediaMonitor
     public MediaInfo? Current { get; private set; }
     public event Action? Changed;
 
+    /// <summary>開発用: 架空の曲を「再生中」にする（紹介動画の書き出し用）</summary>
+    internal void SetDemo(MediaInfo info)
+    {
+        Current = info;
+        Changed?.Invoke();
+    }
+
     public MediaMonitor(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async void Start()

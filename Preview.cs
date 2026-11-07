@@ -29,6 +29,47 @@ internal static class Preview
         Render(outputPath, demo.Where(e => File.Exists(e.Path)).ToList());
     }
 
+    /// <summary>
+    /// 紹介動画用: Windows 標準アプリの Dock アイコンを、1つずつ大きな透過 PNG に書き出す（icon0.png, icon1.png, ...）
+    /// </summary>
+    public static void ExportDemoIcons(string folder, bool dark)
+    {
+        string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        string sys = Environment.SystemDirectory;
+        var demo = new List<DockEntry>
+        {
+            new() { Name = "エクスプローラー", Path = Path.Combine(win, "explorer.exe") },
+            new() { Name = "メモ帳", Path = Path.Combine(sys, "notepad.exe") },
+            new() { Name = "ペイント", Path = Path.Combine(sys, "mspaint.exe") },
+            new() { Name = "タスク マネージャー", Path = Path.Combine(sys, "Taskmgr.exe") },
+            new() { Name = "コマンド プロンプト", Path = Path.Combine(sys, "cmd.exe") },
+            new() { Name = "PowerShell", Path = Path.Combine(sys, @"WindowsPowerShell\v1.0\powershell.exe") },
+            new() { Name = "コントロール パネル", Path = Path.Combine(sys, "control.exe") },
+            new() { Name = "ごみ箱", Path = "::{645FF040-5081-101B-9F08-00AA002F954E}" },
+        }.Where(e => e.Path.StartsWith("::") || File.Exists(e.Path)).ToList();
+
+        Directory.CreateDirectory(folder);
+        var theme = dark ? DockTheme.Dark : DockTheme.Light;
+        const double size = 84, scale = 5;
+        for (int i = 0; i < demo.Count; i++)
+        {
+            var item = new DockItem(demo[i], size, 0, isTrash: demo[i].Path.StartsWith("::"));
+            item.ApplyStyle(theme, useTile: true);
+            var host = new Border { Child = item.Visual };
+            host.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            host.Arrange(new Rect(host.DesiredSize));
+            host.UpdateLayout();
+
+            var bmp = new RenderTargetBitmap((int)Math.Ceiling(host.ActualWidth * scale), (int)Math.Ceiling(host.ActualHeight * scale),
+                96 * scale, 96 * scale, PixelFormats.Pbgra32);
+            bmp.Render(host);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bmp));
+            using var fs = File.Create(Path.Combine(folder, $"icon{i}.png"));
+            encoder.Save(fs);
+        }
+    }
+
     public static void Render(string outputPath, List<DockEntry>? entriesOverride = null)
     {
         var entries = entriesOverride ?? DockConfig.Load();
