@@ -4,6 +4,22 @@ Windows のデスクトップに、拡大アニメーション付きの **Dock**
 
 ![Dock（ライト / ダーク）](docs/screenshots/dock.png)
 
+## ⬇️ ダウンロード
+
+### 👉 [ここをクリックしてダウンロード（Islandock-v1.0.0-windows-x64.zip）](https://github.com/aoto666/Islandock/releases/latest/download/Islandock-v1.0.0-windows-x64.zip)
+
+**使い方は 3 ステップ:**
+1. 上のリンクから zip ファイルをダウンロード
+2. ダウンロードした zip を右クリック →「**すべて展開**」
+3. 展開したフォルダーの中の **`Islandock.exe`** をダブルクリック
+
+> **「Windows によって PC が保護されました」と青い画面が出たら**
+> 個人が作ったアプリなので、最初に出ることがあります。「**詳細情報**」→「**実行**」を押すと起動できます。
+
+- Windows 10 / 11（64 ビット）で動きます。.NET などを別にインストールする必要はありません。
+- **終了**: Dock の背景を右クリック →「Islandock を終了」
+- **アンインストール**: 展開したフォルダーを削除するだけです（設定も消すなら `%APPDATA%\Islandock` も削除）
+
 ## できること
 
 ### Dock（画面下）
@@ -37,8 +53,9 @@ Dock の背景を右クリック →「時計ウィジェットを表示」で�
 
 ![時計ウィジェット](docs/screenshots/clock.png)
 
-## 動かし方
-[.NET 10 SDK](https://dotnet.microsoft.com/download) を入れてから、`start.bat` をダブルクリックするか、このフォルダでターミナルを開いて:
+## ソースコードから動かす（開発者向け）
+ふつうに使うだけなら、上の「ダウンロード」の zip で大丈夫です。
+コードを変えて動かしたい人は、[.NET 10 SDK](https://dotnet.microsoft.com/download) を入れてから、`start.bat` をダブルクリックするか、このフォルダでターミナルを開いて:
 
 ```
 dotnet run
