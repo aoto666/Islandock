@@ -8,6 +8,7 @@ namespace Islandock;
 public partial class App : Application
 {
     private Mutex? _mutex;
+    private bool _ownsMutex;
     private static IslandWindow? _island;
 
     /// <summary>設定画面で設定が変わったときに呼ばれる（Dock・アイランドが見た目を更新する）</summary>
@@ -218,7 +219,19 @@ public partial class App : Application
         }
 
         // すでに Islandock が動いていたら、2つ目は起動しない
-        _mutex = new Mutex(true, "Islandock_SingleInstance", out bool isFirst);
+        // アップデート直後は、前の Islandock が終わるのを少し待つ
+        bool afterUpdate = e.Args.Contains(Updater.UpdatedArg);
+        _mutex = new Mutex(false, "Islandock_SingleInstance");
+        bool isFirst;
+        try
+        {
+            isFirst = _mutex.WaitOne(afterUpdate ? TimeSpan.FromSeconds(20) : TimeSpan.Zero);
+        }
+        catch (AbandonedMutexException)
+        {
+            isFirst = true; // 前の Islandock が異常終了していた
+        }
+        _ownsMutex = isFirst;
         if (!isFirst)
         {
             Shutdown();
@@ -234,6 +247,8 @@ public partial class App : Application
         DesktopRightClick.Start();
         StartupRegistration.ApplyDefaultOnce();
         StartupRegistration.RefreshPath();
+        Updater.CleanupOld();
+        Updater.CheckOnStartup();
     }
 
     private async void GenieRoundTrip(IntPtr hwnd, string output)
@@ -366,11 +381,20 @@ public partial class App : Application
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool AttachThreadInput(uint a, uint b, bool attach);
     [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
 
+    /// <summary>二重起動防止の印を手放す（アップデート後の新しい exe がすぐ起動できるように）</summary>
+    private void ReleaseSingleInstance()
+    {
+        if (!_ownsMutex) return;
+        _mutex?.ReleaseMutex();
+        _ownsMutex = false;
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         DesktopRightClick.Stop();
         TaskbarHider.Restore();
         SearchWindow.Stop();
+        ReleaseSingleInstance();
         _mutex?.Dispose();
         base.OnExit(e);
     }

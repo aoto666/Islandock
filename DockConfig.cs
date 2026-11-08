@@ -62,6 +62,12 @@ public class DockSettings
     /// </summary>
     public bool StartupDefaultApplied { get; set; } = false;
 
+    /// <summary>起動時に、新しいバージョンがないか GitHub を確認する</summary>
+    public bool AutoUpdateCheck { get; set; } = true;
+
+    /// <summary>「いいえ」と答えたバージョン（例: v1.2.0）。起動時の確認では、この版はもうお知らせしない</summary>
+    public string? SkippedUpdateVersion { get; set; }
+
     /// <summary>
     /// 一度でも自動追加の対象として見たデスクトップのファイル。
     /// ユーザーが Dock から削除したものを、また勝手に追加しないために覚えておく。

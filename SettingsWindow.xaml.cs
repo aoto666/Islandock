@@ -118,7 +118,9 @@ public partial class SettingsWindow : Window
             Toggle("検索バー", $"{SearchWindow.HotkeyText} で、アプリとファイルを探せる検索バーを出します",
                 _dock.QuickSearch, on => { _dock.QuickSearch = on; SaveDock(); return true; }),
             Toggle("検索バーを常にデスクトップに表示", "キーを押さなくても、画面の中央（ウィンドウの後ろ）に置いておきます",
-                _dock.SearchPinned, on => { _dock.SearchPinned = on; SaveDock(); return true; }));
+                _dock.SearchPinned, on => { _dock.SearchPinned = on; SaveDock(); return true; }),
+            Toggle("アップデートを自動で確認", $"起動時に新しいバージョンがないか確かめます（いまはバージョン {Updater.CurrentVersion}）",
+                _dock.AutoUpdateCheck, on => { _dock.AutoUpdateCheck = on; SaveDock(); return true; }));
 
         // --- Dock ---
         Section("Dock");
@@ -169,6 +171,7 @@ public partial class SettingsWindow : Window
         var footer = new WrapPanel { Margin = new Thickness(0, 18, 0, 0) };
         footer.Children.Add(FooterButton("設定フォルダーを開く", () =>
             Process.Start(new ProcessStartInfo(System.IO.Path.GetDirectoryName(DockConfig.ConfigPath)!) { UseShellExecute = true })));
+        footer.Children.Add(FooterButton("アップデートを確認", () => _ = Updater.CheckAsync(manual: true)));
         footer.Children.Add(FooterButton("Islandock を終了", () => Application.Current.Shutdown()));
         Body.Children.Add(footer);
     }
