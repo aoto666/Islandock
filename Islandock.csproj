@@ -10,7 +10,7 @@
     <AssemblyName>Islandock</AssemblyName>
     <RootNamespace>Islandock</RootNamespace>
     <!-- リリースのタグ（v1.1.0 など）と合わせる。アプリ内のアップデート確認がこの番号と比べる -->
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
