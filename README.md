@@ -6,7 +6,7 @@ Windows のデスクトップに、拡大アニメーション付きの **Dock**
 
 ## ⬇️ ダウンロード
 
-### 👉 [ここをクリックしてダウンロード（Islandock-v1.0.0-windows-x64.zip）](https://github.com/aoto666/Islandock/releases/latest/download/Islandock-v1.0.0-windows-x64.zip)
+### 👉 [ここをクリックしてダウンロード（Islandock-v1.1.0-windows-x64.zip）](https://github.com/aoto666/Islandock/releases/latest/download/Islandock-v1.1.0-windows-x64.zip)
 
 **使い方は 3 ステップ:**
 1. 上のリンクから zip ファイルをダウンロード
