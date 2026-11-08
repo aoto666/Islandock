@@ -114,7 +114,11 @@ public partial class SettingsWindow : Window
                 StartupRegistration.IsEnabled, StartupRegistration.SetEnabled),
             Toggle("デスクトップの右クリックに Islandock のメニューを出す",
                 "デスクトップの何もないところを右クリックすると、この設定画面を開けます",
-                _dock.DesktopMenu, on => { _dock.DesktopMenu = on; SaveDock(); return true; }));
+                _dock.DesktopMenu, on => { _dock.DesktopMenu = on; SaveDock(); return true; }),
+            Toggle("検索バー", $"{SearchWindow.HotkeyText} で、アプリとファイルを探せる検索バーを出します",
+                _dock.QuickSearch, on => { _dock.QuickSearch = on; SaveDock(); return true; }),
+            Toggle("検索バーを常にデスクトップに表示", "キーを押さなくても、画面の中央（ウィンドウの後ろ）に置いておきます",
+                _dock.SearchPinned, on => { _dock.SearchPinned = on; SaveDock(); return true; }));
 
         // --- Dock ---
         Section("Dock");
@@ -124,6 +128,8 @@ public partial class SettingsWindow : Window
                 _dock.Magnification, on => { _dock.Magnification = on; SaveDock(); return true; }),
             Toggle("Dock を自動的に表示 / 非表示", "画面の下端にマウスを当てたときだけ出します",
                 _dock.AutoHide, on => { _dock.AutoHide = on; SaveDock(); return true; }),
+            Toggle("Windows のタスクバーを隠す", "Dock だけにします。Islandock を終了すると元に戻ります",
+                _dock.HideTaskbar, on => { _dock.HideTaskbar = on; SaveDock(); return true; }),
             Toggle("開く / しまうときのアニメーション（ジニー）", null,
                 _dock.OpenAnimation, on => { _dock.OpenAnimation = on; SaveDock(); return true; }),
             Toggle("アイコンをタイルに揃える", null,

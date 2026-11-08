@@ -18,6 +18,8 @@ public partial class App : Application
     {
         DockTheme.Current().ApplyMenuResources();
         ApplyIslandEnabled();
+        TaskbarHider.Apply(DockConfig.LoadSettings().HideTaskbar);
+        SearchWindow.ApplySetting(DockConfig.LoadSettings().QuickSearch, DockConfig.LoadSettings().SearchPinned);
         ClockWidget.RefreshTheme();
         SettingsChanged?.Invoke();
     }
@@ -199,6 +201,14 @@ public partial class App : Application
             return;
         }
 
+        // 開発用: Islandock.exe --preview-search (light|dark) 言葉 出力.png
+        if (e.Args.Length == 4 && e.Args[0] == "--preview-search")
+        {
+            SearchWindow.RenderPreview(e.Args[3], e.Args[1] == "dark", e.Args[2]);
+            Shutdown();
+            return;
+        }
+
         // 開発用: Islandock.exe --preview-clock 出力.png
         if (e.Args.Length == 2 && e.Args[0] == "--preview-clock")
         {
@@ -215,8 +225,11 @@ public partial class App : Application
             return;
         }
 
+        // 前回タスクバーを隠したまま異常終了していても、設定がオフならここで元に戻る
+        TaskbarHider.Apply(DockConfig.LoadSettings().HideTaskbar);
         new DockWindow().Show();
         ApplyIslandEnabled();
+        SearchWindow.ApplySetting(DockConfig.LoadSettings().QuickSearch, DockConfig.LoadSettings().SearchPinned);
         ClockWidget.ShowIfEnabled();
         DesktopRightClick.Start();
         StartupRegistration.RefreshPath();
@@ -355,6 +368,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         DesktopRightClick.Stop();
+        TaskbarHider.Restore();
+        SearchWindow.Stop();
         _mutex?.Dispose();
         base.OnExit(e);
     }
@@ -371,7 +386,10 @@ public partial class App : Application
             e.Handled = true;
         };
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
             WriteCrashLog("AppDomain (終了します)", e.ExceptionObject as Exception);
+            try { TaskbarHider.Restore(); } catch { } // 落ちるときもタスクバーは戻しておく
+        };
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
             WriteCrashLog("Task", e.Exception);

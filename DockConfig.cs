@@ -47,6 +47,15 @@ public class DockSettings
     /// <summary>デスクトップ（何もないところ）を右クリックしたときに Islandock のメニューを出す</summary>
     public bool DesktopMenu { get; set; } = true;
 
+    /// <summary>Windows のタスクバーを隠して、Dock だけにする（Islandock の終了時に元に戻す）</summary>
+    public bool HideTaskbar { get; set; } = false;
+
+    /// <summary>Alt + Space で、画面の中央に Spotlight 風の検索バーを出す</summary>
+    public bool QuickSearch { get; set; } = true;
+
+    /// <summary>検索バーを、キーを押さなくても常にデスクトップ（ほかのウィンドウの後ろ）に出しておく</summary>
+    public bool SearchPinned { get; set; } = false;
+
     /// <summary>
     /// 一度でも自動追加の対象として見たデスクトップのファイル。
     /// ユーザーが Dock から削除したものを、また勝手に追加しないために覚えておく。
