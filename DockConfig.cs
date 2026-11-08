@@ -57,6 +57,12 @@ public class DockSettings
     public bool SearchPinned { get; set; } = false;
 
     /// <summary>
+    /// 「PC の起動時に開く」を、初回に自動でオンにしたかどうか。
+    /// 一度オンにしたあとは、ユーザーが設定でオフにしても勝手に戻さないために覚えておく。
+    /// </summary>
+    public bool StartupDefaultApplied { get; set; } = false;
+
+    /// <summary>
     /// 一度でも自動追加の対象として見たデスクトップのファイル。
     /// ユーザーが Dock から削除したものを、また勝手に追加しないために覚えておく。
     /// </summary>

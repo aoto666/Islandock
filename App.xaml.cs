@@ -232,6 +232,7 @@ public partial class App : Application
         SearchWindow.ApplySetting(DockConfig.LoadSettings().QuickSearch, DockConfig.LoadSettings().SearchPinned);
         ClockWidget.ShowIfEnabled();
         DesktopRightClick.Start();
+        StartupRegistration.ApplyDefaultOnce();
         StartupRegistration.RefreshPath();
     }
 

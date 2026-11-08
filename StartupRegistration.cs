@@ -53,6 +53,21 @@ public static class StartupRegistration
         }
     }
 
+    /// <summary>
+    /// 初めて起動したときに、「PC の起動時に開く」をオンにする（既定でオン）。
+    /// 2回目以降は何もしないので、ユーザーが設定でオフにしたらそのまま。
+    /// </summary>
+    public static void ApplyDefaultOnce()
+    {
+        var settings = DockConfig.LoadSettings();
+        if (settings.StartupDefaultApplied) return;
+        if (SetEnabled(true))
+        {
+            settings.StartupDefaultApplied = true;
+            DockConfig.SaveSettings(settings);
+        }
+    }
+
     /// <summary>登録済みなのに、登録した場所の exe がなくなっていたら（フォルダーを移動したなど）、いまの場所に書き直す</summary>
     public static void RefreshPath()
     {
