@@ -159,7 +159,7 @@ internal static class DesktopRightClick
 
     private static MenuItem Item(string header, Action onClick)
     {
-        var item = new MenuItem { Header = header };
+        var item = new MenuItem { Header = Loc.T(header) };
         item.Click += (_, _) => onClick();
         return item;
     }

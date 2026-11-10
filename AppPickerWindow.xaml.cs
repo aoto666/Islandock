@@ -22,7 +22,7 @@ public partial class AppPickerWindow : Window
         public required bool AlreadyAdded { get; init; }
         public string Name => App.Name;
         public bool CanAdd => !AlreadyAdded;
-        public string Note => AlreadyAdded ? "追加済み" : App.Source == "デスクトップ" ? "デスクトップ" : "";
+        public string Note => AlreadyAdded ? Loc.T("追加済み") : App.Source == "デスクトップ" ? Loc.T("デスクトップ") : "";
 
         public ImageSource? Icon
         {
@@ -49,6 +49,7 @@ public partial class AppPickerWindow : Window
     public AppPickerWindow(IEnumerable<DockEntry> existing)
     {
         InitializeComponent();
+        Loc.Apply(this);
         var existingPaths = new HashSet<string>(existing.Select(e => e.Path), StringComparer.OrdinalIgnoreCase);
         var existingNames = new HashSet<string>(existing.Select(e => e.Name), StringComparer.CurrentCultureIgnoreCase);
 
@@ -97,8 +98,8 @@ public partial class AppPickerWindow : Window
     private void UpdateCount()
     {
         int n = _candidates.Count(c => c.IsSelected);
-        CountText.Text = n == 0 ? $"{_candidates.Count} 個のアプリ" : $"{n} 個を選択中";
-        AddButton.Content = n == 0 ? "追加" : $"{n} 個を追加";
+        CountText.Text = n == 0 ? Loc.F("{0} 個のアプリ", _candidates.Count) : Loc.F("{0} 個を選択中", n);
+        AddButton.Content = n == 0 ? Loc.T("追加") : Loc.F("{0} 個を追加", n);
     }
 
     private void OnAdd(object sender, RoutedEventArgs e)

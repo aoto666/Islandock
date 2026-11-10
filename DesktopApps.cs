@@ -44,6 +44,6 @@ public static class DesktopApps
 
         string target = IconHelper.ResolveShortcut(path).TrimEnd('\\');
         string targetName = Path.GetFileNameWithoutExtension(target);
-        return string.IsNullOrWhiteSpace(targetName) ? "アプリ" : targetName;
+        return string.IsNullOrWhiteSpace(targetName) ? Loc.T("アプリ") : targetName;
     }
 }

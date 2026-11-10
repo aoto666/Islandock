@@ -472,7 +472,7 @@ public sealed class ClockWidget : Window
 
         foreach (var (label, style) in new[] { ("透明", "Clear"), ("ライト", "Light"), ("ダーク", "Dark"), ("自動（ライト / ダークに合わせる）", "Auto") })
         {
-            var item = new MenuItem { Header = label, IsChecked = _settings.Style == style };
+            var item = new MenuItem { Header = Loc.T(label), IsChecked = _settings.Style == style };
             item.Click += (_, _) =>
             {
                 _settings.Style = style;
@@ -485,7 +485,7 @@ public sealed class ClockWidget : Window
         menu.Items.Add(new Separator());
         foreach (var (label, size) in new[] { ("小", 140.0), ("中", 170.0), ("大", 220.0) })
         {
-            var item = new MenuItem { Header = $"サイズ: {label}", IsChecked = Math.Abs(_settings.Size - size) < 0.5 };
+            var item = new MenuItem { Header = Loc.F("サイズ: {0}", Loc.T(label)), IsChecked = Math.Abs(_settings.Size - size) < 0.5 };
             item.Click += (_, _) =>
             {
                 // 中心の位置を保ったままサイズを変える
@@ -501,7 +501,7 @@ public sealed class ClockWidget : Window
         }
 
         menu.Items.Add(new Separator());
-        var remove = new MenuItem { Header = "ウィジェットを削除" };
+        var remove = new MenuItem { Header = Loc.T("ウィジェットを削除") };
         remove.Click += (_, _) => HideWidget();
         menu.Items.Add(remove);
 

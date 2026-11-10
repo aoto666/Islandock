@@ -87,7 +87,7 @@ public static class Updater
             catch (Exception ex)
             {
                 if (manual)
-                    MessageBox.Show("アップデートを確認できませんでした。\nインターネットにつながっているか確かめてください。\n\n" + ex.Message,
+                    MessageBox.Show(Loc.T("アップデートを確認できませんでした。\nインターネットにつながっているか確かめてください。\n\n") + ex.Message,
                         "Islandock", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -96,7 +96,7 @@ public static class Updater
             if (latest is null || latest.Version <= CurrentVersion)
             {
                 if (manual)
-                    MessageBox.Show($"Islandock は最新です（バージョン {CurrentVersion}）。", "Islandock",
+                    MessageBox.Show(Loc.F("Islandock は最新です（バージョン {0}）。", CurrentVersion), "Islandock",
                         MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -104,16 +104,17 @@ public static class Updater
 
             if (IsDevBuild)
             {
-                MessageBox.Show($"新しいバージョン {latest.Version} があります。\n開発用のビルドなので、自動では入れ替えません。",
+                MessageBox.Show(Loc.F("新しいバージョン {0} があります。\n開発用のビルドなので、自動では入れ替えません。", latest.Version),
                     "Islandock", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             var answer = MessageBox.Show(
-                $"Islandock の新しいバージョン {latest.Version} があります（いまは {CurrentVersion}）。\n\n" +
-                "いま更新しますか？ ダウンロードが終わると、Islandock が自動で再起動します。\n\n" +
-                "「いいえ」を選ぶと、このバージョンはもうお知らせしません\n（設定画面の「アップデートを確認」からいつでも更新できます）。",
-                "Islandock のアップデート", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                Loc.F("Islandock の新しいバージョン {0} があります（いまは {1}）。\n\n" +
+                      "いま更新しますか？ ダウンロードが終わると、Islandock が自動で再起動します。\n\n" +
+                      "「いいえ」を選ぶと、このバージョンはもうお知らせしません\n（設定画面の「アップデートを確認」からいつでも更新できます）。",
+                      latest.Version, CurrentVersion),
+                Loc.T("Islandock のアップデート"), MessageBoxButton.YesNo, MessageBoxImage.Information);
             if (answer != MessageBoxResult.Yes)
             {
                 settings.SkippedUpdateVersion = latest.Tag;
@@ -181,7 +182,7 @@ public static class Updater
             {
                 var entry = zip.Entries.FirstOrDefault(e =>
                                 e.Name.Equals("Islandock.exe", StringComparison.OrdinalIgnoreCase))
-                            ?? throw new InvalidDataException("ダウンロードした zip に Islandock.exe が入っていません。");
+                            ?? throw new InvalidDataException(Loc.T("ダウンロードした zip に Islandock.exe が入っていません。"));
                 entry.ExtractToFile(newExe, overwrite: true);
             }
 
@@ -189,7 +190,7 @@ public static class Updater
             using (var f = File.OpenRead(newExe))
             {
                 if (f.Length < 1024 * 1024 || f.ReadByte() != 'M' || f.ReadByte() != 'Z')
-                    throw new InvalidDataException("ダウンロードした Islandock.exe が壊れています。");
+                    throw new InvalidDataException(Loc.T("ダウンロードした Islandock.exe が壊れています。"));
             }
 
             string old = exe + ".old";
@@ -216,8 +217,8 @@ public static class Updater
                 try { File.Move(exe + ".old", exe); } catch { }
             }
             var answer = MessageBox.Show(
-                "アップデートできませんでした。\n\n" + ex.Message +
-                "\n\nダウンロードページを開きますか？（zip をダウンロードして、いまの Islandock.exe と入れ替えてください）",
+                Loc.T("アップデートできませんでした。\n\n") + ex.Message +
+                Loc.T("\n\nダウンロードページを開きますか？（zip をダウンロードして、いまの Islandock.exe と入れ替えてください）"),
                 "Islandock", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (answer == MessageBoxResult.Yes)
                 Process.Start(new ProcessStartInfo(ReleasesPage) { UseShellExecute = true });

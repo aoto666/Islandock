@@ -41,6 +41,9 @@ public class DockSettings
     /// <summary>見た目: "System"（Windows に合わせる） / "Light" / "Dark"</summary>
     public string Theme { get; set; } = "System";
 
+    /// <summary>表示する言語: "" = Windows に合わせる / "ja" / "en" / "hi"</summary>
+    public string Language { get; set; } = "";
+
     /// <summary>Dock の背景の透明度（0 = 不透明 〜 100 = 完全に透明）</summary>
     public double DockTransparency { get; set; } = 69;
 
@@ -161,11 +164,11 @@ public static class DockConfig
 
         var candidates = new List<DockEntry>
         {
-            new() { Name = "エクスプローラー", Path = System.IO.Path.Combine(win, "explorer.exe") },
+            new() { Name = Loc.T("エクスプローラー"), Path = System.IO.Path.Combine(win, "explorer.exe") },
             new() { Name = "Microsoft Edge", Path = System.IO.Path.Combine(pf86, @"Microsoft\Edge\Application\msedge.exe") },
-            new() { Name = "メモ帳", Path = System.IO.Path.Combine(sys, "notepad.exe") },
-            new() { Name = "電卓", Path = System.IO.Path.Combine(sys, "calc.exe") },
-            new() { Name = "コマンドプロンプト", Path = System.IO.Path.Combine(sys, "cmd.exe") },
+            new() { Name = Loc.T("メモ帳"), Path = System.IO.Path.Combine(sys, "notepad.exe") },
+            new() { Name = Loc.T("電卓"), Path = System.IO.Path.Combine(sys, "calc.exe") },
+            new() { Name = Loc.T("コマンドプロンプト"), Path = System.IO.Path.Combine(sys, "cmd.exe") },
         };
         return candidates.Where(c => File.Exists(c.Path)).ToList();
     }

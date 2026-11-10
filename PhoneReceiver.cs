@@ -35,7 +35,7 @@ public sealed class PhoneReceiver
     public void Start()
     {
         if (Running) return;
-        string ip = LocalAddress() ?? throw new InvalidOperationException("Wi-Fi / 有線 LAN に接続されていません");
+        string ip = LocalAddress() ?? throw new InvalidOperationException(Loc.T("Wi-Fi / 有線 LAN に接続されていません"));
 
         _token = Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
         _listener = Listen(PreferredPort) ?? Listen(0)!;
@@ -240,7 +240,7 @@ public sealed class PhoneReceiver
 
     // ===================== スマホに表示するページ =====================
 
-    private string UploadPage() => """
+    private string UploadPage() => LocalizePage("""
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -285,5 +285,20 @@ function send(file,li){return new Promise(res=>{
  x.onerror=()=>{li.className='err';st.textContent='送れませんでした。PC の受信が止まっていないか確認してください';res();};
  x.send(file);});}
 </script></body></html>
-""";
+""");
+
+    /// <summary>スマホに出すページの文字を、いまの言語に置き換える</summary>
+    private static string LocalizePage(string html)
+    {
+        // 長いものから置き換える（「ファイルを選ぶ」が「写真やファイルを選ぶと…」の一部なので）
+        foreach (var ja in new[]
+                 {
+                     "写真やファイルを選ぶと、PC の「ダウンロード」に保存されます",
+                     "送れませんでした。PC の受信が止まっていないか確認してください",
+                     "Islandock ファイル受信", "PC に送る", "ファイルを選ぶ", "送信しました ✓", "失敗しました", "待機中",
+                 })
+            html = html.Replace(ja, Loc.T(ja));
+        string lang = Loc.Current switch { UiLanguage.English => "en", UiLanguage.Hindi => "hi", _ => "ja" };
+        return html.Replace("<html lang=\"ja\">", $"<html lang=\"{lang}\">");
+    }
 }

@@ -422,8 +422,8 @@ public static class Genie
         timeout.Start();
     }
 
-    private static readonly string[] MinimizeNames = { "最小化", "Minimize" };
-    private static readonly string[] CloseNames = { "閉じる", "Close" };
+    private static readonly string[] MinimizeNames = { "最小化", "Minimize", "छोटा करें" };
+    private static readonly string[] CloseNames = { "閉じる", "Close", "बंद करें" };
 
     /// <summary>
     /// その場所にあるアプリのウィンドウ（いちばん手前のもの）。

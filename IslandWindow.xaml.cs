@@ -26,7 +26,6 @@ public partial class IslandWindow : Window
     private static readonly TimeSpan HideDelay = TimeSpan.FromMilliseconds(350);  // 小さくなってから隠れるまで
     private const double HiddenOffset = -60; // 隠れているときの位置（影ごと画面の外へ）
 
-    private static readonly CultureInfo Japanese = new("ja-JP");
     private static readonly Brush ChipActive = Frozen(Color.FromRgb(0xF2, 0xF2, 0xF7));
     private static readonly Brush ChipInactive = Frozen(Color.FromRgb(0x2C, 0x2C, 0x2E));
     private static readonly Brush TodayRed = Frozen(Color.FromRgb(0xFF, 0x45, 0x3A));
@@ -46,6 +45,7 @@ public partial class IslandWindow : Window
     public IslandWindow()
     {
         InitializeComponent();
+        Loc.Apply(this);
         PlaceWindow();
         InitLive();
         InitAirDrop();
@@ -149,8 +149,8 @@ public partial class IslandWindow : Window
         var now = DateTime.Now;
         CompactTime.Text = now.ToString("H:mm");
         BigTime.Text = now.ToString("H:mm");
-        BigDate.Text = now.ToString("yyyy年M月d日 dddd", Japanese);
-        CompactRight.Text = now.ToString("M月d日 (ddd)", Japanese);
+        BigDate.Text = now.ToString(Loc.DateFormat("yyyy年M月d日 dddd"), Loc.Culture);
+        CompactRight.Text = now.ToString(Loc.DateFormat("M月d日 (ddd)"), Loc.Culture);
 
         // 日付が変わったらカレンダーの「今日」も更新
         if (DayGrid.Tag is DateTime rendered && rendered != DateTime.Today) RenderCalendar();
@@ -386,7 +386,7 @@ public partial class IslandWindow : Window
 
     private void BuildWeekHeader()
     {
-        string[] names = { "日", "月", "火", "水", "木", "金", "土" };
+        string[] names = Loc.WeekdayHeaders();
         foreach (var n in names)
         {
             WeekHeader.Children.Add(new TextBlock
@@ -403,7 +403,7 @@ public partial class IslandWindow : Window
     {
         DayGrid.Children.Clear();
         DayGrid.Tag = DateTime.Today;
-        MonthTitle.Text = _shownMonth.ToString("yyyy年M月", Japanese);
+        MonthTitle.Text = _shownMonth.ToString(Loc.DateFormat("yyyy年M月"), Loc.Culture);
 
         // 表示する最初の日（その月の1日を含む週の日曜日）
         var start = _shownMonth.AddDays(-(int)_shownMonth.DayOfWeek);

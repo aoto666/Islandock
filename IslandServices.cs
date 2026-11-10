@@ -222,7 +222,7 @@ public sealed class MediaMonitor
             "MSEdge" or "msedge" => "Microsoft Edge",
             "chrome" or "Chrome" => "Google Chrome",
             "firefox" => "Firefox",
-            "ZuneMusic" => "メディア プレーヤー",
+            "ZuneMusic" => Loc.T("メディア プレーヤー"),
             "SpotifyMusic" => "Spotify",
             _ => s,
         };

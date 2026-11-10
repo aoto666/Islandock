@@ -37,6 +37,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+        Loc.Apply(this);
         ApplyColors();
         Build();
         App.SettingsChanged += OnSettingsChanged;
@@ -110,16 +111,17 @@ public partial class SettingsWindow : Window
         Section("一般");
         Card(
             Row("外観", "Dock・メニュー・時計ウィジェットの色", ThemePicker()),
+            Row("言語", "変えると Islandock が再起動します", LanguagePicker()),
             Toggle("PC の起動時に Islandock を開く", "Windows にサインインしたときに自動で起動します",
                 StartupRegistration.IsEnabled, StartupRegistration.SetEnabled),
             Toggle("デスクトップの右クリックに Islandock のメニューを出す",
                 "デスクトップの何もないところを右クリックすると、この設定画面を開けます",
                 _dock.DesktopMenu, on => { _dock.DesktopMenu = on; SaveDock(); return true; }),
-            Toggle("検索バー", $"{SearchWindow.HotkeyText} で、アプリとファイルを探せる検索バーを出します",
+            Toggle("検索バー", Loc.F("{0} で、アプリとファイルを探せる検索バーを出します", SearchWindow.HotkeyText),
                 _dock.QuickSearch, on => { _dock.QuickSearch = on; SaveDock(); return true; }),
             Toggle("検索バーを常にデスクトップに表示", "キーを押さなくても、画面の中央（ウィンドウの後ろ）に置いておきます",
                 _dock.SearchPinned, on => { _dock.SearchPinned = on; SaveDock(); return true; }),
-            Toggle("アップデートを自動で確認", $"起動時に新しいバージョンがないか確かめます（いまはバージョン {Updater.CurrentVersion}）",
+            Toggle("アップデートを自動で確認", Loc.F("起動時に新しいバージョンがないか確かめます（いまはバージョン {0}）", Updater.CurrentVersion),
                 _dock.AutoUpdateCheck, on => { _dock.AutoUpdateCheck = on; SaveDock(); return true; }));
 
         // --- Dock ---
@@ -195,9 +197,10 @@ public partial class SettingsWindow : Window
 
     // ===== 部品 =====
 
+    /// <summary>文字の部品。渡された日本語はここで今の言語に訳す（表にない文字はそのまま）</summary>
     private static TextBlock Text(string text, double size, string brushKey)
     {
-        var t = new TextBlock { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap };
+        var t = new TextBlock { Text = Loc.T(text), FontSize = size, TextWrapping = TextWrapping.Wrap };
         t.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
         return t;
     }
@@ -312,7 +315,7 @@ public partial class SettingsWindow : Window
         {
             var rb = new RadioButton
             {
-                Content = label,
+                Content = Loc.T(label),
                 GroupName = "Theme",
                 IsChecked = _dock.Theme == value || (value == "System" && _dock.Theme is not ("Light" or "Dark")),
             };
@@ -321,6 +324,30 @@ public partial class SettingsWindow : Window
             {
                 _dock.Theme = value;
                 SaveDock();
+            };
+            panel.Children.Add(rb);
+        }
+        var bg = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(2), Child = panel };
+        bg.SetResourceReference(Border.BackgroundProperty, "S.SegBg");
+        return bg;
+    }
+
+    /// <summary>表示する言語（それぞれの言語の名前で並べる。選ぶと保存して再起動する）</summary>
+    private FrameworkElement LanguagePicker()
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (var (label, code, lang) in new[]
+                 {
+                     ("日本語", "ja", UiLanguage.Japanese),
+                     ("English", "en", UiLanguage.English),
+                     ("हिन्दी", "hi", UiLanguage.Hindi),
+                 })
+        {
+            var rb = new RadioButton { Content = label, GroupName = "Language", IsChecked = Loc.Current == lang };
+            rb.SetResourceReference(StyleProperty, "Segment");
+            rb.Checked += (_, _) =>
+            {
+                if (Loc.Current != lang) Dispatcher.BeginInvoke(() => Loc.ChangeAndRestart(code));
             };
             panel.Children.Add(rb);
         }
@@ -366,7 +393,7 @@ public partial class SettingsWindow : Window
 
     private static Button FooterButton(string text, Action onClick)
     {
-        var b = new Button { Content = text, Margin = new Thickness(0, 0, 8, 8) };
+        var b = new Button { Content = Loc.T(text), Margin = new Thickness(0, 0, 8, 8) };
         b.SetResourceReference(StyleProperty, "FooterButton");
         b.Click += (_, _) => onClick();
         return b;

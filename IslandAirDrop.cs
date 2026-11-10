@@ -119,7 +119,7 @@ public partial class IslandWindow
     {
         AirDropZone.BorderBrush = new SolidColorBrush(on ? AirBlue : Color.FromRgb(0x3A, 0x3A, 0x3C));
         AirDropZone.Background = new SolidColorBrush(on ? Color.FromRgb(0x0B, 0x1E, 0x36) : Color.FromRgb(0x14, 0x14, 0x16));
-        AirDropTitle.Text = on ? "離すと送信します" : "ファイル共有";
+        AirDropTitle.Text = on ? Loc.T("離すと送信します") : Loc.T("ファイル共有");
 
         if (on)
         {
@@ -146,7 +146,7 @@ public partial class IslandWindow
     private void OnAirDropPick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         Log("クリック → ファイル選択");
-        var dialog = new OpenFileDialog { Title = "共有するファイルを選択", Multiselect = true };
+        var dialog = new OpenFileDialog { Title = Loc.T("共有するファイルを選択"), Multiselect = true };
         if (dialog.ShowDialog(this) == true && dialog.FileNames.Length > 0) ShareFiles(dialog.FileNames.ToList());
     }
 
@@ -159,7 +159,7 @@ public partial class IslandWindow
         int skipped = paths.Count - files.Count;
         if (files.Count == 0)
         {
-            AirDropHint.Text = "フォルダーは送れません。ファイルを選んでください（必要なら ZIP にまとめてください）";
+            AirDropHint.Text = Loc.T("フォルダーは送れません。ファイルを選んでください（必要なら ZIP にまとめてください）");
             return;
         }
 
@@ -179,16 +179,16 @@ public partial class IslandWindow
             Log($"ShowShareUIForWindow ({files.Count} 個, 前面={NativeMethods.GetForegroundWindow() == hwnd})");
             DataTransferManagerInterop.ShowShareUIForWindow(hwnd);
 
-            AirDropHint.Text = (files.Count == 1 ? Path.GetFileName(files[0]) : $"{files.Count} 個のファイル")
-                               + " — 送信先を選んでください"
-                               + (skipped > 0 ? $"（フォルダー {skipped} 個は除外）" : "");
+            AirDropHint.Text = (files.Count == 1 ? Path.GetFileName(files[0]) : Loc.F("{0} 個のファイル", files.Count))
+                               + Loc.T(" — 送信先を選んでください")
+                               + (skipped > 0 ? Loc.F("（フォルダー {0} 個は除外）", skipped) : "");
             Collapse(); // 共有画面と重ならないよう縮める
         }
         catch (Exception ex)
         {
             Log("共有画面エラー: " + ex);
-            AirDropHint.Text = "共有画面を開けませんでした: " + ex.Message;
-            MessageBox.Show("共有画面を開けませんでした。\n\n" + ex.Message, "Islandock");
+            AirDropHint.Text = Loc.T("共有画面を開けませんでした: ") + ex.Message;
+            MessageBox.Show(Loc.T("共有画面を開けませんでした。\n\n") + ex.Message, "Islandock");
         }
     }
 
@@ -209,7 +209,7 @@ public partial class IslandWindow
             _phone.Receiving += name => Dispatcher.BeginInvoke(() =>
             {
                 RestartPhoneIdle();
-                PhoneState.Text = "受信中: " + name;
+                PhoneState.Text = Loc.T("受信中: ") + name;
                 PhoneState.Foreground = new SolidColorBrush(AirBlue);
             });
             _phone.Received += path => Dispatcher.BeginInvoke(() => OnPhoneReceived(path));
@@ -225,13 +225,13 @@ public partial class IslandWindow
         catch (Exception ex)
         {
             Log("スマホ受信 エラー: " + ex);
-            AirDropHint.Text = "受信を始められませんでした: " + ex.Message;
+            AirDropHint.Text = Loc.T("受信を始められませんでした: ") + ex.Message;
             return;
         }
 
         PhoneQr.Source = MakeQr(_phone.Url);
         PhoneUrl.Text = _phone.Url;
-        PhoneState.Text = "待機中…（15 分で自動停止）";
+        PhoneState.Text = Loc.T("待機中…（15 分で自動停止）");
         PhoneState.Foreground = new SolidColorBrush(Green);
         RestartPhoneIdle();
         UpdateAirDropStatus();
@@ -257,12 +257,12 @@ public partial class IslandWindow
     {
         Log("受信: " + path);
         string name = Path.GetFileName(path);
-        PhoneState.Text = "受信しました ✓ " + name;
+        PhoneState.Text = Loc.T("受信しました ✓ ") + name;
         PhoneState.Foreground = new SolidColorBrush(Green);
 
         var open = new Button
         {
-            Content = "表示",
+            Content = Loc.T("表示"),
             Style = (Style)FindResource("PillButton"),
             Padding = new Thickness(12, 5, 12, 5),
         };
@@ -314,15 +314,15 @@ public partial class IslandWindow
             foreach (var path in _pendingShare)
                 items.Add(await StorageFile.GetFileFromPathAsync(path));
 
-            request.Data.Properties.Title = items.Count == 1 ? items[0].Name : $"{items.Count} 個のファイル";
-            request.Data.Properties.Description = "Islandock ファイル共有";
+            request.Data.Properties.Title = items.Count == 1 ? items[0].Name : Loc.F("{0} 個のファイル", items.Count);
+            request.Data.Properties.Description = Loc.T("Islandock ファイル共有");
             request.Data.SetStorageItems(items);
             Log("共有データ設定 OK");
         }
         catch (Exception ex)
         {
             Log("DataRequested エラー: " + ex);
-            request.FailWithDisplayText("ファイルを読み込めませんでした: " + ex.Message);
+            request.FailWithDisplayText(Loc.T("ファイルを読み込めませんでした: ") + ex.Message);
         }
         finally
         {
@@ -352,12 +352,12 @@ public partial class IslandWindow
             0 => ("PC間: オフ", Color.FromRgb(0x8E, 0x8E, 0x93)),
             _ => ("PC間: 不明", Color.FromRgb(0x8E, 0x8E, 0x93)),
         };
-        AirDropStatus.Text = text;
-        AirDropStatus.ToolTip = "Windows の近距離共有で、ほかの PC から受け取れる相手（「設定」で変更）";
+        AirDropStatus.Text = Loc.T(text);
+        AirDropStatus.ToolTip = Loc.T("Windows の近距離共有で、ほかの PC から受け取れる相手（「設定」で変更）");
         PhonePanel.Visibility = _phone.Running ? Visibility.Visible : Visibility.Collapsed;
         PhoneButton.Visibility = _phone.Running ? Visibility.Collapsed : Visibility.Visible;
         AirDropStatusDot.Fill = new SolidColorBrush(dot);
-        if (!_dragOver) AirDropHint.Text = "ファイルをここにドラッグ、またはクリックして選択";
+        if (!_dragOver) AirDropHint.Text = Loc.T("ファイルをここにドラッグ、またはクリックして選択");
     }
 
     private void OnAirDropSettings(object sender, RoutedEventArgs e)

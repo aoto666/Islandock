@@ -83,7 +83,7 @@ public partial class IslandWindow
         {
             var b = new Button
             {
-                Content = $"{minutes}分",
+                Content = Loc.F("{0}分", minutes),
                 Style = (Style)FindResource("PillButton"),
                 Margin = new Thickness(0, 0, 5, 5),
                 Padding = new Thickness(10, 4, 10, 4),
@@ -260,7 +260,7 @@ public partial class IslandWindow
         CameraDot.Visibility = cam ? Visibility.Visible : Visibility.Collapsed;
         PrivacyDots.Visibility = mic || cam ? Visibility.Visible : Visibility.Collapsed;
         PrivacyDots.ToolTip = string.Join("\n",
-            _privacy.CameraApps.Select(a => "カメラ: " + a).Concat(_privacy.MicApps.Select(a => "マイク: " + a)));
+            _privacy.CameraApps.Select(a => Loc.T("カメラ: ") + a).Concat(_privacy.MicApps.Select(a => Loc.T("マイク: ") + a)));
 
         // 右側に何か出ていても、アイランド本体は画面の真ん中に保つ
         double right = (showBubble ? 43 : 0) + (mic || cam ? 14 : 0);
@@ -404,7 +404,7 @@ public partial class IslandWindow
     {
         bool has = BgmUrl(IslandConfig.Load().BgmPlaylist) != null;
         BgmPlayButton.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
-        BgmEditButton.Content = has ? "変更" : "♪  BGM の再生リストを設定";
+        BgmEditButton.Content = has ? Loc.T("変更") : Loc.T("♪  BGM の再生リストを設定");
         BgmEditButton.Margin = new Thickness(has ? 6 : 0, 0, 0, 0);
     }
 
@@ -413,7 +413,7 @@ public partial class IslandWindow
         BgmEditor.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         BgmButtons.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
         BgmEditorHint.Foreground = new SolidColorBrush(Color.FromRgb(0x8E, 0x8E, 0x93));
-        BgmEditorHint.Text = "例: https://www.youtube.com/playlist?list=PL…（空にして保存すると解除）";
+        BgmEditorHint.Text = Loc.T("例: https://www.youtube.com/playlist?list=PL…（空にして保存すると解除）");
         if (show)
         {
             BgmUrlBox.Text = IslandConfig.Load().BgmPlaylist ?? "";
@@ -445,7 +445,7 @@ public partial class IslandWindow
         if (value.Length > 0 && BgmUrl(value) == null)
         {
             BgmEditorHint.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x9A));
-            BgmEditorHint.Text = "YouTube の再生リスト（または動画）の URL を貼り付けてください";
+            BgmEditorHint.Text = Loc.T("YouTube の再生リスト（または動画）の URL を貼り付けてください");
             return;
         }
         var settings = IslandConfig.Load();
@@ -616,7 +616,7 @@ public partial class IslandWindow
 
     private void UpdateTimerButtons()
     {
-        TimerStartButton.Content = _timerEndsAt != null ? "一時停止" : _timerStarted ? "再開" : "開始";
+        TimerStartButton.Content = Loc.T(_timerEndsAt != null ? "一時停止" : _timerStarted ? "再開" : "開始");
     }
 
     private void TimerFinished()
@@ -628,7 +628,7 @@ public partial class IslandWindow
 
         var stop = new Button
         {
-            Content = "停止",
+            Content = Loc.T("停止"),
             Style = (Style)FindResource("PillButton"),
             Background = new SolidColorBrush(Orange),
             Foreground = Brushes.Black,
@@ -637,7 +637,7 @@ public partial class IslandWindow
             Margin = new Thickness(0, 0, 6, 0),
         };
         stop.Click += (_, _) => StopAlarm();
-        var again = new Button { Content = "+1分", Style = (Style)FindResource("PillButton"), Padding = new Thickness(12, 6, 12, 6) };
+        var again = new Button { Content = Loc.T("+1分"), Style = (Style)FindResource("PillButton"), Padding = new Thickness(12, 6, 12, 6) };
         again.Click += (_, _) =>
         {
             StopAlarm();
@@ -683,7 +683,7 @@ public partial class IslandWindow
             var time = new TextBlock { Text = FormatStopwatch(lap), Foreground = Brushes.White, FontSize = 13 };
             DockPanel.SetDock(time, Dock.Right);
             row.Children.Add(time);
-            row.Children.Add(new TextBlock { Text = $"ラップ {_laps.Count}", Foreground = new SolidColorBrush(Color.FromRgb(0x8E, 0x8E, 0x93)), FontSize = 13 });
+            row.Children.Add(new TextBlock { Text = Loc.F("ラップ {0}", _laps.Count), Foreground = new SolidColorBrush(Color.FromRgb(0x8E, 0x8E, 0x93)), FontSize = 13 });
             LapList.Children.Insert(0, row);
         }
         else
@@ -700,9 +700,9 @@ public partial class IslandWindow
     private void UpdateStopwatchButtons()
     {
         bool running = _stopwatch.IsRunning;
-        StopwatchStartButton.Content = running ? "停止" : _stopwatch.Elapsed > TimeSpan.Zero ? "再開" : "開始";
+        StopwatchStartButton.Content = Loc.T(running ? "停止" : _stopwatch.Elapsed > TimeSpan.Zero ? "再開" : "開始");
         StopwatchStartButton.Background = new SolidColorBrush(running ? Red : Green);
-        StopwatchLapButton.Content = running ? "ラップ" : "リセット";
+        StopwatchLapButton.Content = Loc.T(running ? "ラップ" : "リセット");
         StopwatchLapButton.IsEnabled = running || _stopwatch.Elapsed > TimeSpan.Zero;
     }
 
@@ -721,10 +721,10 @@ public partial class IslandWindow
 
         _alert = new Alert(kind, width, height, sticky);
         AlertLeft.Content = left;
-        AlertTitle.Text = title;
+        AlertTitle.Text = Loc.T(title);
         AlertTitle.Foreground = titleBrush ?? Brushes.White;
         AlertTitle.Visibility = center == null ? Visibility.Visible : Visibility.Collapsed;
-        AlertSub.Text = sub ?? "";
+        AlertSub.Text = sub == null ? "" : Loc.T(sub);
         AlertSub.Visibility = center == null && !string.IsNullOrEmpty(sub) ? Visibility.Visible : Visibility.Collapsed;
         AlertCenter.Content = center;
         AlertCenter.Visibility = center != null ? Visibility.Visible : Visibility.Collapsed;
@@ -766,7 +766,7 @@ public partial class IslandWindow
     private void OnOutputDeviceChanged()
     {
         string name = _audio.DeviceName;
-        bool headphone = new[] { "ヘッドホン", "ヘッドセット", "イヤホン", "Headphone", "Headset", "AirPods", "Buds", "Earbuds", "Hands-Free" }
+        bool headphone = new[] { "ヘッドホン", "ヘッドセット", "イヤホン", "हेडफ़ोन", "हेडसेट", "Headphone", "Headset", "AirPods", "Buds", "Earbuds", "Hands-Free" }
             .Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase));
         ShowAlert("device", CircleGlyph(headphone ? "" : "", Color.FromRgb(0x0A, 0x84, 0xFF)),
             string.IsNullOrEmpty(name) ? "オーディオ出力" : name, "音の出力先が切り替わりました",
@@ -787,7 +787,7 @@ public partial class IslandWindow
                     right: BatteryWithText(pct, pct <= 20 ? Red : Colors.White), width: 320, height: 40, seconds: 2);
                 break;
             case PowerMonitor.Change.Low:
-                ShowAlert("power", BatteryIcon(pct, Red), "バッテリー残量が少なくなっています", $"残り {pct}%",
+                ShowAlert("power", BatteryIcon(pct, Red), "バッテリー残量が少なくなっています", Loc.F("残り {0}%", pct),
                     width: 380, height: 58, seconds: 4.5);
                 break;
             case PowerMonitor.Change.SaverOn:

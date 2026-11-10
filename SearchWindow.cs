@@ -93,7 +93,7 @@ public sealed class SearchWindow : Window
 
     private SearchWindow()
     {
-        Title = "Islandock 検索";
+        Title = Loc.T("Islandock 検索");
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -119,7 +119,7 @@ public sealed class SearchWindow : Window
         _query.Padding = new Thickness(0);
         _query.TextChanged += (_, _) => UpdateResults();
 
-        _placeholder.Text = "検索";
+        _placeholder.Text = Loc.T("検索");
         _placeholder.FontSize = 22;
         _placeholder.FontFamily = _query.FontFamily;
         _placeholder.IsHitTestVisible = false;
@@ -222,7 +222,7 @@ public sealed class SearchWindow : Window
         }
         if (_hotkeyIndex < 0)
         {
-            HotkeyText = "（使えるキーがありません）";
+            HotkeyText = Loc.T("（使えるキーがありません）");
             Log("hotkey: none available");
         }
     }
@@ -450,10 +450,10 @@ public sealed class SearchWindow : Window
             return;
         }
 
-        if (results.Top != null) AddSection("トップヒット", new[] { results.Top }, big: true);
-        AddSection("アプリケーション", results.Apps);
-        AddSection("フォルダ", results.Folders);
-        AddSection("ファイル", results.Files);
+        if (results.Top != null) AddSection(Loc.T("トップヒット"), new[] { results.Top }, big: true);
+        AddSection(Loc.T("アプリケーション"), results.Apps);
+        AddSection(Loc.T("フォルダ"), results.Folders);
+        AddSection(Loc.T("ファイル"), results.Files);
 
         _divider.Visibility = Visibility.Visible;
         _scroll.Visibility = Visibility.Visible;
@@ -599,7 +599,7 @@ public sealed class SearchWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"開けませんでした:\n{item.Path}\n\n{ex.Message}", "Islandock", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Loc.F("開けませんでした:\n{0}\n\n{1}", item.Path, ex.Message), "Islandock", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -746,7 +746,7 @@ public static class SearchIndex
         try
         {
             foreach (var a in InstalledApps.FindAll())
-                apps.Add(new SearchItem { Name = a.Name, Path = a.Path, Kind = SearchKind.App, Detail = "アプリケーション", Key = Normalize(a.Name) });
+                apps.Add(new SearchItem { Name = a.Name, Path = a.Path, Kind = SearchKind.App, Detail = Loc.T("アプリケーション"), Key = Normalize(a.Name) });
         }
         catch
         {
@@ -817,7 +817,7 @@ public static class SearchIndex
     /// <summary>入っているフォルダーを、Mac 風に「親 › フォルダー」の形で短く表す</summary>
     private static string ShortPath(string path, string home)
     {
-        if (path.Equals(home, StringComparison.OrdinalIgnoreCase)) return "ホーム";
+        if (path.Equals(home, StringComparison.OrdinalIgnoreCase)) return Loc.T("ホーム");
         var parts = path.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
         return parts.Length switch
         {
@@ -907,7 +907,7 @@ public static class SearchIndex
             double d = Convert.ToDouble(value);
             if (double.IsNaN(d) || double.IsInfinity(d)) return null;
             string text = Math.Round(d, 10).ToString("G15");
-            return new SearchItem { Name = "= " + text, Path = "", Kind = SearchKind.Calc, Detail = "Enter でコピー" };
+            return new SearchItem { Name = "= " + text, Path = "", Kind = SearchKind.Calc, Detail = Loc.T("Enter でコピー") };
         }
         catch
         {

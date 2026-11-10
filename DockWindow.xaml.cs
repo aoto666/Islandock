@@ -251,7 +251,7 @@ public partial class DockWindow : Window
             AddItemVisual(new DockItem(entry, BaseSize, Gap));
 
         // アプリの並びの最後に「＋」ボタン（押すとアプリ一覧から追加できる）
-        AddItemVisual(new DockItem(new DockEntry { Name = "アプリを追加" }, BaseSize, Gap, isAddButton: true));
+        AddItemVisual(new DockItem(new DockEntry { Name = Loc.T("アプリを追加") }, BaseSize, Gap, isAddButton: true));
 
         _separator = null;
         _trash = null;
@@ -274,7 +274,7 @@ public partial class DockWindow : Window
         };
         IconPanel.Children.Add(_separator);
 
-        _trash = new DockItem(new DockEntry { Name = "ごみ箱", Path = RecycleBinPath }, BaseSize, Gap, isTrash: true);
+        _trash = new DockItem(new DockEntry { Name = Loc.T("ごみ箱"), Path = RecycleBinPath }, BaseSize, Gap, isTrash: true);
         AddItemVisual(_trash);
 
         foreach (var item in _items) item.ApplyStyle(_theme, _settings.IconTiles);
@@ -528,7 +528,7 @@ public partial class DockWindow : Window
             return;
         }
 
-        NameText.Text = _dragItem != null && _dragRemove ? "Dock から削除" : hovered.Entry.Name;
+        NameText.Text = _dragItem != null && _dragRemove ? Loc.T("Dock から削除") : hovered.Entry.Name;
         NameLabel.Visibility = Visibility.Visible;
         var top = hovered.Visual.TranslatePoint(new Point(hovered.Visual.ActualWidth / 2, 0), Root);
         Canvas.SetLeft(NameLabel, Math.Round(top.X - NameLabel.ActualWidth / 2));
@@ -623,7 +623,7 @@ public partial class DockWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"起動できませんでした:\n{item.Entry.Path}\n\n{ex.Message}", "Islandock",
+            MessageBox.Show(Loc.F("起動できませんでした:\n{0}\n\n{1}", item.Entry.Path, ex.Message), "Islandock",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -971,7 +971,7 @@ public partial class DockWindow : Window
 
     private static MenuItem Item(string header, Action onClick, bool enabled = true)
     {
-        var item = new MenuItem { Header = header, IsEnabled = enabled };
+        var item = new MenuItem { Header = Loc.T(header), IsEnabled = enabled };
         item.Click += (_, _) => onClick();
         return item;
     }
@@ -1025,7 +1025,7 @@ public partial class DockWindow : Window
         menu.Items.Add(Item("Islandock の設定...", SettingsWindow.Open));
         menu.Items.Add(new Separator());
 
-        var magnify = new MenuItem { Header = "拡大", IsCheckable = true, IsChecked = _settings.Magnification };
+        var magnify = new MenuItem { Header = Loc.T("拡大"), IsCheckable = true, IsChecked = _settings.Magnification };
         magnify.Click += (_, _) =>
         {
             _settings.Magnification = magnify.IsChecked;
@@ -1033,7 +1033,7 @@ public partial class DockWindow : Window
         };
         menu.Items.Add(magnify);
 
-        var autoHide = new MenuItem { Header = "Dock を自動的に表示/非表示", IsCheckable = true, IsChecked = _settings.AutoHide };
+        var autoHide = new MenuItem { Header = Loc.T("Dock を自動的に表示/非表示"), IsCheckable = true, IsChecked = _settings.AutoHide };
         autoHide.Click += (_, _) =>
         {
             _settings.AutoHide = autoHide.IsChecked;
@@ -1041,7 +1041,7 @@ public partial class DockWindow : Window
         };
         menu.Items.Add(autoHide);
 
-        var genie = new MenuItem { Header = "開く/しまうときのアニメーション（ジニー）", IsCheckable = true, IsChecked = _settings.OpenAnimation };
+        var genie = new MenuItem { Header = Loc.T("開く/しまうときのアニメーション（ジニー）"), IsCheckable = true, IsChecked = _settings.OpenAnimation };
         genie.Click += (_, _) =>
         {
             _settings.OpenAnimation = genie.IsChecked;
@@ -1049,7 +1049,7 @@ public partial class DockWindow : Window
         };
         menu.Items.Add(genie);
 
-        var tiles = new MenuItem { Header = "アイコンをタイルに揃える", IsCheckable = true, IsChecked = _settings.IconTiles };
+        var tiles = new MenuItem { Header = Loc.T("アイコンをタイルに揃える"), IsCheckable = true, IsChecked = _settings.IconTiles };
         tiles.Click += (_, _) =>
         {
             _settings.IconTiles = tiles.IsChecked;
@@ -1058,7 +1058,7 @@ public partial class DockWindow : Window
         };
         menu.Items.Add(tiles);
 
-        var autoAdd = new MenuItem { Header = "デスクトップのアプリを自動で追加", IsCheckable = true, IsChecked = _settings.AutoAddDesktopApps };
+        var autoAdd = new MenuItem { Header = Loc.T("デスクトップのアプリを自動で追加"), IsCheckable = true, IsChecked = _settings.AutoAddDesktopApps };
         autoAdd.Click += (_, _) =>
         {
             _settings.AutoAddDesktopApps = autoAdd.IsChecked;
@@ -1067,7 +1067,7 @@ public partial class DockWindow : Window
         };
         menu.Items.Add(autoAdd);
 
-        var trash = new MenuItem { Header = "ごみ箱を表示", IsCheckable = true, IsChecked = _settings.ShowTrash };
+        var trash = new MenuItem { Header = Loc.T("ごみ箱を表示"), IsCheckable = true, IsChecked = _settings.ShowTrash };
         trash.Click += (_, _) =>
         {
             _settings.ShowTrash = trash.IsChecked;
@@ -1076,7 +1076,7 @@ public partial class DockWindow : Window
         };
         menu.Items.Add(trash);
 
-        var clock = new MenuItem { Header = "時計ウィジェットを表示", IsCheckable = true, IsChecked = ClockWidget.IsShown };
+        var clock = new MenuItem { Header = Loc.T("時計ウィジェットを表示"), IsCheckable = true, IsChecked = ClockWidget.IsShown };
         clock.Click += (_, _) =>
         {
             if (clock.IsChecked) ClockWidget.ShowWidget();
@@ -1135,8 +1135,8 @@ public partial class DockWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Dock に追加するアプリを選択",
-            Filter = "アプリ・ショートカット (*.exe;*.lnk)|*.exe;*.lnk|すべてのファイル (*.*)|*.*",
+            Title = Loc.T("Dock に追加するアプリを選択"),
+            Filter = Loc.T("アプリ・ショートカット (*.exe;*.lnk)|*.exe;*.lnk|すべてのファイル (*.*)|*.*"),
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
             Multiselect = true,
         };
@@ -1190,7 +1190,7 @@ public partial class DockWindow : Window
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"ごみ箱に移動できませんでした:\n{file}\n\n{ex.Message}", "Islandock",
+                MessageBox.Show(Loc.F("ごみ箱に移動できませんでした:\n{0}\n\n{1}", file, ex.Message), "Islandock",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
